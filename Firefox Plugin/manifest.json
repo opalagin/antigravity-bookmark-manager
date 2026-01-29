@@ -1,0 +1,19 @@
+{
+    "manifest_version": 3,
+    "name": "Smart Bookmark Manager",
+    "version": "1.0",
+    "description": "AI-powered personal knowledge base for your bookmarks.",
+    "permissions": [
+        "activeTab",
+        "storage"
+    ],
+    "action": {
+        "default_popup": "popup.html",
+        "default_title": "Smart Bookmark Manager"
+    },
+    "background": {
+        "scripts": [
+            "background.js"
+        ]
+    }
+}

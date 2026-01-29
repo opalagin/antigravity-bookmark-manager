@@ -1,0 +1,39 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Smart Bookmark Manager</title>
+    <link rel="stylesheet" href="popup.css">
+</head>
+
+<body>
+    <div class="container">
+        <header>
+            <h1>Smart Bookmarks</h1>
+        </header>
+
+        <main>
+            <button id="save-btn" class="primary-btn">
+                <span class="icon">🔖</span> Save Current Page
+            </button>
+
+            <div class="search-container">
+                <input type="text" id="search-input" placeholder="Ask your bookmarks...">
+            </div>
+
+            <section class="recent-bookmarks">
+                <h2>Recent</h2>
+                <ul id="bookmarks-list">
+                    <!-- Javascript will populate this -->
+                    <li class="empty-state">Loading...</li>
+                </ul>
+            </section>
+        </main>
+    </div>
+    <script src="api.js"></script>
+    <script src="popup.js"></script>
+</body>
+
+</html>
