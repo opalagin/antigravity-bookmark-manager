@@ -31,9 +31,17 @@ class SearchResult(BaseModel):
     url: str
     title: Optional[str]
     score: float # Distance usually, so lower is better for L2, higher for Cos/Inner if converted.
-    text: str # Chunk text
+class ChatRequest(BaseModel):
+    query: str
 
-# --- Lifespan ---
+class ChatResponse(BaseModel):
+    answer: str
+    sources: List[str]
+
+# ... existing code ...
+
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     # Startup: Ensure engine is ready
@@ -50,7 +58,7 @@ app = FastAPI(title="Smart Bookmark Manager API", version="1.0.0", lifespan=life
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
-    allow_credentials=True,
+    allow_credentials=False,
     allow_methods=["*"],
     allow_headers=["*"],
 )
@@ -100,6 +108,17 @@ async def search_bookmarks(
             
         return response_list
 
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/chat", response_model=ChatResponse)
+async def chat_bookmarks(
+    request: ChatRequest,
+    session: AsyncSession = Depends(get_session)
+):
+    try:
+        answer, sources = await search_service.chat(session, request.query)
+        return ChatResponse(answer=answer, sources=sources)
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 

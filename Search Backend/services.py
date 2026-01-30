@@ -6,6 +6,8 @@ from sentence_transformers import SentenceTransformer
 from models import Bookmark, BookmarkEmbedding
 from database import get_session
 import asyncio
+import os
+from openai import AsyncOpenAI
 
 # --- Embedding Service ---
 class EmbeddingService:
@@ -94,5 +96,39 @@ class SearchService:
         
         result = await session.execute(stmt)
         return result.all()
+
+    async def chat(self, session: AsyncSession, query: str) -> tuple[str, List[str]]:
+        # 1. Retrieve Context
+        results = await self.search(session, query, limit=5)
+        
+        if not results:
+            return "I couldn't find any relevant bookmarks to answer your question.", []
+            
+        context_text = ""
+        sources = []
+        
+        for i, (embedding_entry, bookmark) in enumerate(results):
+            context_text += f"Source {i+1} ({bookmark.title}): {embedding_entry.chunk_text}\n\n"
+            sources.append(bookmark.url)
+            
+        # 2. LLM Generation
+        api_key = os.getenv("OPENAI_API_KEY")
+        if not api_key:
+            # Fallback Mock
+            answer = f"**[Mock AI Response]**\n\nBased on your bookmarks, here is what I found:\n\n{context_text}\n\n*Note: Set OPENAI_API_KEY to get real answers.*"
+            return answer, sources
+
+        try:
+            client = AsyncOpenAI(api_key=api_key)
+            response = await client.chat.completions.create(
+                model="gpt-4o-mini",
+                messages=[
+                    {"role": "system", "content": "You are a helpful assistant. Answer the user's question using ONLY the provided context. If the answer is not in the context, say you don't know."},
+                    {"role": "user", "content": f"Context:\n{context_text}\n\nQuestion: {query}"}
+                ]
+            )
+            return response.choices[0].message.content, sources
+        except Exception as e:
+            return f"Error contacting OpenAI: {str(e)}", sources
 
 search_service = SearchService(embedding_service)

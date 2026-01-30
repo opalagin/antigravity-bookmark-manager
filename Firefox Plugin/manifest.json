@@ -5,12 +5,21 @@
     "description": "AI-powered personal knowledge base for your bookmarks.",
     "permissions": [
         "activeTab",
-        "storage"
+        "storage",
+        "scripting"
     ],
     "action": {
         "default_popup": "popup.html",
         "default_title": "Smart Bookmark Manager"
     },
+    "sidebar_action": {
+        "default_panel": "sidebar.html",
+        "default_title": "Smart Bookmarks",
+        "default_icon": "icons/icon.png"
+    },
+    "host_permissions": [
+        "http://localhost:8000/*"
+    ],
     "background": {
         "scripts": [
             "background.js"

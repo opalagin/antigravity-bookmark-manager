@@ -19,12 +19,29 @@ document.addEventListener('DOMContentLoaded', () => {
                 throw new Error("No active tab found");
             }
 
-            // Call API
-            // Note: Content extraction to be implemented. sending title as content placeholder for now.
-            // Using a simple fallback object if window.api is missing for some reason
+            // 2. Inject Extraction Scripts
+            await browser.scripting.executeScript({
+                target: { tabId: currentTab.id },
+                files: ['lib/Readability.js', 'lib/turndown.js']
+            });
+
+            // 3. Execute Extraction Logic
+            const executionResults = await browser.scripting.executeScript({
+                target: { tabId: currentTab.id },
+                files: ['extract.js']
+            });
+
+            const extractedData = executionResults[0].result;
+            console.log("Extracted:", extractedData);
+
+            // 4. Send to Backend
             if (!window.api) throw new Error("API client not loaded");
 
-            await window.api.saveBookmark(currentTab.url, currentTab.title, `[Content of ${currentTab.title}]`);
+            await window.api.saveBookmark(
+                extractedData.url,
+                extractedData.title,
+                extractedData.content
+            );
 
             // Success feedback
             saveBtn.innerHTML = '<span class="icon">✅</span> Saved!';

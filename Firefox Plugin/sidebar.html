@@ -1,0 +1,33 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <meta charset="UTF-8">
+    <link rel="stylesheet" href="popup.css"> <!-- Reuse basics -->
+    <link rel="stylesheet" href="sidebar.css">
+</head>
+
+<body>
+    <div class="app-container">
+        <header>
+            <h2>Chat 💬</h2>
+        </header>
+
+        <div id="chat-history" class="chat-history">
+            <div class="message ai-message">
+                <div class="content">
+                    Hello! Ask me anything about your saved bookmarks.
+                </div>
+            </div>
+        </div>
+
+        <div class="input-area">
+            <textarea id="chat-input" placeholder="Ask a question..." rows="1"></textarea>
+            <button id="send-btn" disabled>➤</button>
+        </div>
+    </div>
+    <script src="api.js"></script>
+    <script src="sidebar.js"></script>
+</body>
+
+</html>

@@ -1,0 +1,119 @@
+body {
+    width: 100%;
+    height: 100vh;
+    margin: 0;
+    overflow: hidden;
+    background-color: #f8f9fa;
+}
+
+.app-container {
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+    max-width: 100%;
+}
+
+header {
+    padding: 12px;
+    background: white;
+    border-bottom: 1px solid #e0e0e0;
+    flex-shrink: 0;
+}
+
+header h2 {
+    margin: 0;
+    font-size: 16px;
+    color: #2d3436;
+}
+
+.chat-history {
+    flex: 1;
+    overflow-y: auto;
+    padding: 16px;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+.message {
+    max-width: 85%;
+    padding: 10px 14px;
+    border-radius: 12px;
+    font-size: 14px;
+    line-height: 1.4;
+    word-wrap: break-word;
+}
+
+.user-message {
+    align-self: flex-end;
+    background-color: #0984e3;
+    color: white;
+    border-bottom-right-radius: 2px;
+}
+
+.ai-message {
+    align-self: flex-start;
+    background-color: white;
+    border: 1px solid #dfe6e9;
+    color: #2d3436;
+    border-bottom-left-radius: 2px;
+}
+
+.input-area {
+    padding: 12px;
+    background: white;
+    border-top: 1px solid #e0e0e0;
+    display: flex;
+    gap: 8px;
+    flex-shrink: 0;
+}
+
+textarea {
+    flex: 1;
+    padding: 8px;
+    border: 1px solid #dfe6e9;
+    border-radius: 8px;
+    resize: none;
+    font-family: inherit;
+    outline: none;
+}
+
+textarea:focus {
+    border-color: #0984e3;
+}
+
+button#send-btn {
+    width: 36px;
+    height: 36px;
+    border: none;
+    background: #0984e3;
+    color: white;
+    border-radius: 50%;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: background 0.2s;
+}
+
+button#send-btn:hover {
+    background: #74b9ff;
+}
+
+button#send-btn:disabled {
+    background: #b2bec3;
+    cursor: not-allowed;
+}
+
+/* Citations/Markdown Styles */
+.ai-message strong {
+    font-weight: 600;
+}
+
+.reference {
+    display: inline-block;
+    font-size: 10px;
+    vertical-align: super;
+    color: #0984e3;
+    cursor: pointer;
+}

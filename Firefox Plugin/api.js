@@ -50,6 +50,29 @@ const api = {
             console.error("API Error (searchBookmarks):", error);
             throw error;
         }
+    },
+    async chat(query) {
+        try {
+            const response = await fetch(`${API_BASE_URL}/chat`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    query: query
+                })
+            });
+
+            if (!response.ok) {
+                const errorData = await response.json();
+                throw new Error(errorData.detail || 'Failed to get chat response');
+            }
+
+            return await response.json();
+        } catch (error) {
+            console.error("API Error (chat):", error);
+            throw error;
+        }
     }
 };
 

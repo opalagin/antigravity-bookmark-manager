@@ -6,17 +6,17 @@ An AI-powered personal knowledge base that allows you to "chat with your reading
 
 *   **Firefox Extension**:
     *   **Popup UI**: Clean, modern interface for quick actions.
-    *   **Save Page**: Instantly save the current browser tab (URL & Title) to your local database.
-    *   **Search**: Search your bookmarks using natural language queries.
+    *   **Sidebar Chat**: Persistent "Smart Bookmarks" sidebar for chatting with your knowledge base.
+    *   **Full Content Extraction**: Automatically captures article text using `Readability.js` (with `Turndown` for Markdown conversion), ensuring high-quality context for the AI.
+    *   **Smart Fallback**: Even on JavaScript-heavy sites, the extension captures page text.
 *   **Backend & Storage**:
-    *   **FastAPI Service**: Handles ingestion and vector search requests.
+    *   **FastAPI Service**: Handles ingestion, vector search, and RAG chat.
     *   **PostgreSQL + pgvector**: Stores bookmark metadata and vector embeddings for semantic search.
+    *   **AI Integration**: Connected to OpenAI (`gpt-4o-mini`) for generating synthesized answers based on your bookmarks.
 
-## ⚠️ Limitations (v1.0)
+## ⚠️ Limitations (v1.1)
 
-*   **Content Extraction**: Currently saves semantic metadata (Title/URL) but does not yet perform full-text extraction of the webpage body.
-*   **AI Generation**: The "Search" feature currently returns raw matching bookmarks based on vector similarity or keywords, but does not yet generate a synthesized AI answer (RAG chat).
-*   **Localhost Only**: The extension is hardcoded to communicate with `http://localhost:8000`.
+*   **Localhost Only**: The extension is currently configured to communicate with `http://localhost:8000`.
 *   **No Authentication**: Single-user system designed for local use.
 
 ## 🚀 How to Launch
@@ -43,10 +43,18 @@ cd "Search Backend"
 # Install dependencies
 pip install -r requirements.txt
 
+# Set OpenAI API Key (Required for Chat Generation)
+# Windows (PowerShell):
+$env:OPENAI_API_KEY="sk-your-key-here"
+# Mac/Linux:
+export OPENAI_API_KEY=sk-your-key-here
+
 # Run the server
 uvicorn main:app --reload
 ```
 The API will be available at `http://localhost:8000`.
+
+**Note**: If you do not provide an `OPENAI_API_KEY`, the backend will run in **Mock Mode**, returning raw search chunks instead of a generated answer.
 
 ### 3. Load the Firefox Extension
 1.  Open Firefox and navigate to `about:debugging`.
@@ -55,4 +63,6 @@ The API will be available at `http://localhost:8000`.
 4.  Navigate to the `Firefox Plugin/` folder in this project.
 5.  Select the `manifest.json` file.
 
-The extensions icon (🔖) should appear in your toolbar. Click it to start saving and searching!
+The extension icon (🔖) should appear in your toolbar.
+- **Click the Icon** to Save the current page.
+- **Open Sidebar (Ctrl+B)** and select "Smart Bookmarks" to chat with your library.
