@@ -1,5 +1,5 @@
 from typing import List
-from sqlmodel import select
+from sqlmodel import select, delete
 from sqlmodel.ext.asyncio.session import AsyncSession
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 from sentence_transformers import SentenceTransformer
@@ -45,12 +45,28 @@ class IngestionService:
         )
 
     async def process_bookmark(self, session: AsyncSession, url: str, title: str, content: str) -> Bookmark:
-        # 1. Create Bookmark
-        bookmark = Bookmark(url=url, title=title, content_markdown=content)
-        session.add(bookmark)
-        await session.flush() # get ID
+        # 1. Check if exists
+        stmt = select(Bookmark).where(Bookmark.url == url)
+        result = await session.execute(stmt)
+        existing_bookmark = result.scalar_one_or_none()
+
+        if existing_bookmark:
+            # Update existing
+            bookmark = existing_bookmark
+            bookmark.title = title
+            bookmark.content_markdown = content
+            
+            # Clear old embeddings to re-ingest
+            del_stmt = delete(BookmarkEmbedding).where(BookmarkEmbedding.bookmark_id == bookmark.id)
+            await session.execute(del_stmt)
+        else:
+            # Create New
+            bookmark = Bookmark(url=url, title=title, content_markdown=content)
+            session.add(bookmark)
+            await session.flush() # get ID
         
         if not content:
+            await session.commit() # Commit updates if any
             return bookmark
 
         # 2. Chunk Content
@@ -130,5 +146,11 @@ class SearchService:
             return response.choices[0].message.content, sources
         except Exception as e:
             return f"Error contacting OpenAI: {str(e)}", sources
+
+    async def get_recent(self, session: AsyncSession, limit: int = 10):
+        # Return list of Bookmarks
+        stmt = select(Bookmark).order_by(Bookmark.created_at.desc()).limit(limit)
+        result = await session.execute(stmt)
+        return result.scalars().all()
 
 search_service = SearchService(embedding_service)

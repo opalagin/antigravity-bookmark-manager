@@ -87,6 +87,24 @@ async def ingest_bookmark(
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
+@app.get("/recent", response_model=List[BookmarkResponse])
+async def get_recent_bookmarks(
+    limit: int = 10,
+    session: AsyncSession = Depends(get_session)
+):
+    try:
+        bookmarks = await search_service.get_recent(session, limit)
+        return [
+            BookmarkResponse(
+                id=str(b.id),
+                url=b.url,
+                title=b.title,
+                status="saved"
+            ) for b in bookmarks
+        ]
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
 @app.post("/search", response_model=List[SearchResult])
 async def search_bookmarks(
     request: SearchRequest,

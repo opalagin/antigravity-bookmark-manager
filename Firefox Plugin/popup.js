@@ -115,6 +115,24 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 
-    // Initial state
-    bookmarksList.innerHTML = '<li class="empty-state">Ready to search</li>';
+    // Initial state: Load recent bookmarks
+    async function loadRecent() {
+        try {
+            bookmarksList.innerHTML = '<li class="empty-state">Loading recent...</li>';
+            if (!window.api) throw new Error("API client not loaded");
+
+            const recent = await window.api.getRecent(10);
+            renderBookmarks(recent);
+
+            if (recent.length === 0) {
+                bookmarksList.innerHTML = '<li class="empty-state">No bookmarks saved yet.</li>';
+            }
+        } catch (error) {
+            console.error("Recent fetch failed:", error);
+            bookmarksList.innerHTML = `<li class="empty-state">Unable to load recent.</li>`;
+            // Silent fail for user, just show empty or error state
+        }
+    }
+
+    loadRecent();
 });

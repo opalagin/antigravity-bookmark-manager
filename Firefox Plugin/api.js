@@ -73,6 +73,27 @@ const api = {
             console.error("API Error (chat):", error);
             throw error;
         }
+    },
+
+    async getRecent(limit = 10) {
+        try {
+            const response = await fetch(`${API_BASE_URL}/recent?limit=${limit}`, {
+                method: 'GET',
+                headers: {
+                    'Content-Type': 'application/json',
+                }
+            });
+
+            if (!response.ok) {
+                const errorData = await response.json();
+                throw new Error(errorData.detail || 'Failed to get recent bookmarks');
+            }
+
+            return await response.json();
+        } catch (error) {
+            console.error("API Error (getRecent):", error);
+            throw error;
+        }
     }
 };
 
