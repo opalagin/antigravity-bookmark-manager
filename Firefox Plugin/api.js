@@ -1,99 +1,77 @@
 const API_BASE_URL = 'http://localhost:8000';
 
 const api = {
-    async saveBookmark(url, title, content) {
-        try {
-            const response = await fetch(`${API_BASE_URL}/bookmarks`, {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                },
-                body: JSON.stringify({
-                    url: url,
-                    title: title,
-                    content_markdown: content || "" // Fallback for now
-                })
-            });
+    token: null,
 
-            if (!response.ok) {
-                const errorData = await response.json();
-                throw new Error(errorData.detail || 'Failed to save bookmark');
-            }
+    setToken(token) {
+        this.token = token;
+    },
 
-            return await response.json();
-        } catch (error) {
-            console.error("API Error (saveBookmark):", error);
-            throw error;
+    getToken() {
+        return this.token;
+    },
+
+    async _fetch(endpoint, options = {}) {
+        if (!this.token) {
+            throw new Error("No Auth Token. Please login.");
         }
+
+        const headers = {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${this.token}`,
+            ...options.headers
+        };
+
+        const response = await fetch(`${API_BASE_URL}${endpoint}`, {
+            ...options,
+            headers: headers
+        });
+
+        if (!response.ok) {
+            if (response.status === 401) {
+                throw new Error("Unauthorized");
+            }
+            const errorData = await response.json();
+            throw new Error(errorData.detail || 'API Request Failed');
+        }
+
+        return await response.json();
+    },
+
+    async saveBookmark(url, title, content, tags = []) {
+        return this._fetch('/bookmarks', {
+            method: 'POST',
+            body: JSON.stringify({
+                url: url,
+                title: title,
+                content_markdown: content || "",
+                tags: tags
+            })
+        });
     },
 
     async searchBookmarks(query) {
-        try {
-            const response = await fetch(`${API_BASE_URL}/search`, {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                },
-                body: JSON.stringify({
-                    query: query,
-                    limit: 10
-                })
-            });
-
-            if (!response.ok) {
-                const errorData = await response.json();
-                throw new Error(errorData.detail || 'Failed to search bookmarks');
-            }
-
-            return await response.json();
-        } catch (error) {
-            console.error("API Error (searchBookmarks):", error);
-            throw error;
-        }
+        return this._fetch('/search', {
+            method: 'POST',
+            body: JSON.stringify({
+                query: query,
+                limit: 10
+            })
+        });
     },
     async chat(query) {
-        try {
-            const response = await fetch(`${API_BASE_URL}/chat`, {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                },
-                body: JSON.stringify({
-                    query: query
-                })
-            });
-
-            if (!response.ok) {
-                const errorData = await response.json();
-                throw new Error(errorData.detail || 'Failed to get chat response');
-            }
-
-            return await response.json();
-        } catch (error) {
-            console.error("API Error (chat):", error);
-            throw error;
-        }
+        return this._fetch('/chat', {
+            method: 'POST',
+            body: JSON.stringify({
+                query: query
+            })
+        });
     },
 
     async getRecent(limit = 10) {
-        try {
-            const response = await fetch(`${API_BASE_URL}/recent?limit=${limit}`, {
-                method: 'GET',
-                headers: {
-                    'Content-Type': 'application/json',
-                }
-            });
-
-            if (!response.ok) {
-                const errorData = await response.json();
-                throw new Error(errorData.detail || 'Failed to get recent bookmarks');
-            }
-
-            return await response.json();
-        } catch (error) {
-            console.error("API Error (getRecent):", error);
-            throw error;
-        }
+        return this._fetch(`/recent?limit=${limit}`, {
+            method: 'GET'
+        });
     }
 };
 

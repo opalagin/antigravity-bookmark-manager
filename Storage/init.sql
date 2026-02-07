@@ -4,11 +4,15 @@ CREATE EXTENSION IF NOT EXISTS vector;
 -- Table for storing high-level bookmark/article metadata
 CREATE TABLE IF NOT EXISTS bookmarks (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    url TEXT NOT NULL UNIQUE,
+    user_id TEXT NOT NULL,
+    url TEXT NOT NULL,
     title TEXT,
     content_markdown TEXT,
-    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+    tags TEXT[],
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT unique_user_url UNIQUE (user_id, url)
 );
+CREATE INDEX IF NOT EXISTS idx_bookmarks_user_id ON bookmarks(user_id);
 
 -- Table for storing vector embeddings of article chunks
 CREATE TABLE IF NOT EXISTS bookmark_embeddings (

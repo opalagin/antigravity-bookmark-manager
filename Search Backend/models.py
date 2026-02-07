@@ -1,17 +1,21 @@
 from typing import Optional, List
 from uuid import UUID, uuid4
 from datetime import datetime
-from sqlmodel import Field, SQLModel, Relationship, Column, TIMESTAMP
+from sqlmodel import Field, SQLModel, Relationship, Column, TIMESTAMP, UniqueConstraint
 from pgvector.sqlalchemy import Vector
 from sqlalchemy import func
+from sqlalchemy.dialects.postgresql import ARRAY, VARCHAR
 
 class Bookmark(SQLModel, table=True):
     __tablename__ = "bookmarks"
+    __table_args__ = (UniqueConstraint("user_id", "url", name="unique_user_url"),)
     
     id: Optional[UUID] = Field(default_factory=uuid4, primary_key=True)
-    url: str = Field(unique=True, index=True)
+    user_id: str = Field(index=True)
+    url: str = Field(index=True)
     title: Optional[str] = None
     content_markdown: Optional[str] = None
+    tags: List[str] = Field(default=[], sa_column=Column(ARRAY(VARCHAR)))
     created_at: Optional[datetime] = Field(
         sa_column=Column(TIMESTAMP(timezone=True), server_default=func.now())
     )

@@ -44,9 +44,9 @@ class IngestionService:
             chunk_overlap=200
         )
 
-    async def process_bookmark(self, session: AsyncSession, url: str, title: str, content: str) -> Bookmark:
-        # 1. Check if exists
-        stmt = select(Bookmark).where(Bookmark.url == url)
+    async def process_bookmark(self, session: AsyncSession, user_id: str, url: str, title: str, content: str, tags: List[str] = []) -> Bookmark:
+        # 1. Check if exists for this user
+        stmt = select(Bookmark).where(Bookmark.url == url, Bookmark.user_id == user_id)
         result = await session.execute(stmt)
         existing_bookmark = result.scalar_one_or_none()
 
@@ -55,13 +55,14 @@ class IngestionService:
             bookmark = existing_bookmark
             bookmark.title = title
             bookmark.content_markdown = content
+            bookmark.tags = tags
             
             # Clear old embeddings to re-ingest
             del_stmt = delete(BookmarkEmbedding).where(BookmarkEmbedding.bookmark_id == bookmark.id)
             await session.execute(del_stmt)
         else:
             # Create New
-            bookmark = Bookmark(url=url, title=title, content_markdown=content)
+            bookmark = Bookmark(user_id=user_id, url=url, title=title, content_markdown=content, tags=tags)
             session.add(bookmark)
             await session.flush() # get ID
         
@@ -100,22 +101,25 @@ class SearchService:
     def __init__(self, embedding_service: EmbeddingService):
         self.embedding_service = embedding_service
 
-    async def search(self, session: AsyncSession, query: str, limit: int = 5):
+    async def search(self, session: AsyncSession, user_id: str, query: str, limit: int = 5):
         # 1. Embed Query
         query_vector = await self.embedding_service.embed_query(query)
         
         # 2. Vector Search with Join
         # Return tuple (BookmarkEmbedding, Bookmark)
-        stmt = select(BookmarkEmbedding, Bookmark).join(Bookmark).order_by(
+        # Filter by user_id on Bookmark
+        stmt = select(BookmarkEmbedding, Bookmark).join(Bookmark).where(
+            Bookmark.user_id == user_id
+        ).order_by(
             BookmarkEmbedding.embedding.cosine_distance(query_vector)
         ).limit(limit)
         
         result = await session.execute(stmt)
         return result.all()
 
-    async def chat(self, session: AsyncSession, query: str) -> tuple[str, List[str]]:
+    async def chat(self, session: AsyncSession, user_id: str, query: str) -> tuple[str, List[str]]:
         # 1. Retrieve Context
-        results = await self.search(session, query, limit=5)
+        results = await self.search(session, user_id, query, limit=5)
         
         if not results:
             return "I couldn't find any relevant bookmarks to answer your question.", []
@@ -147,9 +151,9 @@ class SearchService:
         except Exception as e:
             return f"Error contacting OpenAI: {str(e)}", sources
 
-    async def get_recent(self, session: AsyncSession, limit: int = 10):
+    async def get_recent(self, session: AsyncSession, user_id: str, limit: int = 10):
         # Return list of Bookmarks
-        stmt = select(Bookmark).order_by(Bookmark.created_at.desc()).limit(limit)
+        stmt = select(Bookmark).where(Bookmark.user_id == user_id).order_by(Bookmark.created_at.desc()).limit(limit)
         result = await session.execute(stmt)
         return result.scalars().all()
 

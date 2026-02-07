@@ -34,13 +34,18 @@ document.addEventListener('DOMContentLoaded', () => {
             const extractedData = executionResults[0].result;
             console.log("Extracted:", extractedData);
 
+            // 3.5 Get Tags
+            const tagsInput = document.getElementById('tags-input');
+            const tags = tagsInput.value.split(',').map(t => t.trim()).filter(t => t);
+
             // 4. Send to Backend
             if (!window.api) throw new Error("API client not loaded");
 
             await window.api.saveBookmark(
                 extractedData.url,
                 extractedData.title,
-                extractedData.content
+                extractedData.content,
+                tags
             );
 
             // Success feedback
@@ -134,5 +139,104 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
 
-    loadRecent();
+    // Auth & Init
+    async function checkAuth() {
+        const stored = await browser.storage.local.get('authToken');
+        if (stored.authToken) {
+            api.setToken(stored.authToken);
+            showLogoutButton();
+            loadRecent();
+        } else {
+            showLogin();
+        }
+    }
+
+    function showLogoutButton() {
+        // Check if button already exists
+        if (document.getElementById('logout-btn')) return;
+
+        const header = document.querySelector('header');
+        const logoutBtn = document.createElement('button');
+        logoutBtn.id = 'logout-btn';
+        logoutBtn.textContent = 'Logout';
+        logoutBtn.className = 'secondary-btn'; // Assuming this class exists or will default to simple style
+        logoutBtn.style.position = 'absolute';
+        logoutBtn.style.right = '15px';
+        logoutBtn.style.top = '15px';
+        logoutBtn.style.fontSize = '0.8rem';
+        logoutBtn.style.padding = '4px 8px';
+
+        logoutBtn.addEventListener('click', async () => {
+            await browser.storage.local.remove('authToken');
+            api.setToken(null);
+            document.getElementById('logout-btn').remove();
+            showLogin();
+        });
+
+        header.appendChild(logoutBtn);
+    }
+
+    function showLogin() {
+        // Clear Logout button if present
+        const existingLogout = document.getElementById('logout-btn');
+        if (existingLogout) existingLogout.remove();
+
+        bookmarksList.innerHTML = `
+            <div class="login-container">
+                <p>Please login to save bookmarks.</p>
+                <button id="login-btn" class="primary-btn" style="background-color: #4285F4;">Login with Google</button>
+                <div style="font-size: 0.8em; margin-top: 10px; color: #666;">
+                    Note: Requires configured Client ID
+                </div>
+            </div>
+        `;
+
+        document.getElementById('login-btn').addEventListener('click', async () => {
+            try {
+                bookmarksList.innerHTML = '<li class="empty-state">Authenticating...</li>';
+
+                // CLIENT CONFIGURATION
+                // TODO: User must replace this with their actual Client ID from Google Console
+                const CLIENT_ID = "127114677197-aei7k7s99vosi3hpqqti1v8h3r493te8.apps.googleusercontent.com";
+                const REDIRECT_URI = browser.identity.getRedirectURL();
+                const AUTH_URL = `https://accounts.google.com/o/oauth2/v2/auth?client_id=${CLIENT_ID}&response_type=token&redirect_uri=${encodeURIComponent(REDIRECT_URI)}&scope=openid%20email%20profile`;
+
+                console.log("Launching Auth Flow:", AUTH_URL);
+
+                const redirectUrl = await browser.identity.launchWebAuthFlow({
+                    interactive: true,
+                    url: AUTH_URL
+                });
+
+                if (redirectUrl) {
+                    // Extract token from URL hash (access_token=...)
+                    const url = new URL(redirectUrl);
+                    const params = new URLSearchParams(url.hash.substring(1)); // hash starts with #
+                    const token = params.get("access_token");
+
+                    if (token) {
+                        await browser.storage.local.set({ authToken: token });
+                        api.setToken(token);
+                        showLogoutButton();
+                        bookmarksList.innerHTML = '<li class="empty-state">Logged in! Loading...</li>';
+                        loadRecent();
+                    } else {
+                        throw new Error("No access token found in redirect.");
+                    }
+                }
+            } catch (error) {
+                console.error("Auth Failed:", error);
+                bookmarksList.innerHTML = `
+                    <li class="empty-state error-state">
+                        Authentication Failed: ${error.message}<br>
+                        <small>Check Client ID and Redirect URI in popup.js</small>
+                    </li>
+                `;
+                // Re-show login button after a delay or let user retry
+                setTimeout(showLogin, 5000);
+            }
+        });
+    }
+
+    checkAuth();
 });

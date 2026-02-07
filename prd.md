@@ -2,9 +2,9 @@
 
 ## 1. Executive Summary
 **Project Name:** Smart Bookmark Manager
-**Goal:** Create an AI-powered personal knowledge base that allows users to bookmark web pages and later retrieve information via natural language chat using RAG (Retrieval-Augmented Generation).
+**Goal:** Create a secure, multi-user AI-powered personal knowledge base that allows users to bookmark, tag, and later retrieve information via natural language chat using RAG.
 **Core Value Proposition:** "Chat with your reading list."
-**Key Constraint:** The entire user interface (saving and searching) must live within the Firefox Extension. No separate web application.
+**Key Constraint:** The entire user interface must live within the Firefox Extension. The backend must be containerized and support multi-tenancy.
 
 ## 2. System Architecture
 
@@ -23,31 +23,43 @@
 *   **Backend**:
     *   Language: Python
     *   Framework: FastAPI (Async, high performance).
+    *   Authentication: OAuth2 + PKCE (via Firefox Identity).
     *   Search/RAG: LangChain or direct implementation.
 *   **Storage**:
-    *   Primary DB: **PostgreSQL**
+    *   Primary DB: **PostgreSQL** (Persistent via Docker Volumes).
     *   Vector Extension: **pgvector**.
     *   Search: Hybrid (BM25 + Vector).
+*   **Infrastructure**:
+    *   Containerization: Docker & Docker Compose.
+    *   Proxy: Nginx (Termination & HTTPS).
 
 ## 3. Functional Requirements
 
 ### 3.1 Ingestion Flow (Bookmark)
-*   **User Action**: Click extension icon -> Click "Save Page".
+*   **User Action**: Click extension icon -> Login (if needed) -> Click "Save Page".
 *   **System Action**:
     1.  Extension extracts content (Readability).
-    2.  Converts to Markdown.
-    3.  Sends payload to Backend API.
-    4.  Backend processes (clean, chunk, embed, store).
-    5.  Extension shows success notification.
+    2.  Suggests tags (optional AI pre-fetch).
+    3.  User confirms/edits tags.
+    4.  Sends payload (content + tags + auth token) to Backend API.
+    5.  Backend validates token and tenancy.
+    6.  Backend processes (clean, chunk, embed, store).
+    7.  Extension shows success notification.
 
 ### 3.2 Retrieval Flow (Search/Chat)
-*   **User Action**: Open Extension Popup or Sidebar -> Type question (e.g., "Do I have articles about X?").
+*   **User Action**: Open Extension Popup -> Type question.
 *   **System Action**:
-    1.  Extension sends query to Backend API.
-    2.  Backend performs Vector + Keyword search in `pgvector`.
-    3.  Retrieves context chunks.
+    1.  Extension sends query + auth token to Backend API.
+    2.  Backend authenticates and restricts search to user's data.
+    3.  Backend performs Vector + Keyword search.
     4.  Generates answer via LLM.
-    5.  Streams response to the Extension UI with citations.
+    5.  Streams response.
+
+### 3.3 Security & Multi-tenancy
+*   **Authentication**: OAuth2 via Firefox Identity API.
+*   **Authorization**: Backend validates JWT/opaque tokens. Data access strictly scoped to `user_id`.
+*   **Transport**: HTTPS only for all endpoints.
+*   **Persistence**: Database storage persisted to Docker volumes.
 
 ## 4. Data Model (PostgreSQL)
 
@@ -55,9 +67,11 @@
 | Column | Type | Description |
 | :--- | :--- | :--- |
 | `id` | UUID | Primary Key |
-| `url` | TEXT | Unique URL |
+| `user_id` | TEXT | Owner ID (Auth Subject) |
+| `url` | TEXT | Unique URL (Per user) |
 | `title` | TEXT | Page Title |
 | `content_markdown` | TEXT | Archival content |
+| `tags` | TEXT[] | Array of tags |
 | `created_at` | TIMESTAMPTZ | Timestamp |
 
 ### `bookmark_embeddings`
@@ -73,9 +87,10 @@
 
 ### 5.1 Popup UI (Quick Actions)
 *   **Main View**:
-    *   "Save Current Page" Big Button.
+    *   "Save Current Page" with **Tag Input**.
     *   Simple Search Bar ("Ask your bookmarks...").
-    *   Recent Bookmarks list (compact).
+    *   Recent Bookmarks list.
+    *   **User Profile / Logout**.
 
 ### 5.2 Sidebar / Full Page UI (Deep Interaction)
 *   **Chat Mode**:
