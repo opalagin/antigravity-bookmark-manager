@@ -70,7 +70,35 @@ The API will be available at `http://localhost:8000`.
 4.  Navigate to the `Firefox Plugin/` folder in this project.
 5.  Select the `manifest.json` file.
 
+#### Configuration (Important!)
+By default, the extension connects to `http://localhost`, which works with the Docker setup (see below).
+**If running the Search Backend locally on port 8000:**
+1.  Go to `about:addons`.
+2.  Find **Smart Bookmark Manager** and click the **3-dot menu** -> **Preferences** (or Options).
+3.  Change the **Backend API URL** to `http://localhost:8000`.
+4.  Click **Save**.
+
 
 The extension icon (🔖) should appear in your toolbar.
 - **Click the Icon** to Save the current page.
 - **Open Sidebar (Ctrl+B)** and select "Smart Bookmarks" to chat with your library.
+
+## 🐳 Docker Deployment (Recommended)
+
+You can run the entire system (Backend + Database + Traefik) using Docker Compose.
+
+1.  **Configure Environment**:
+    -   Copy `.env.example` to `.env` in the root directory.
+    -   Fill in `OPENAI_API_KEY` and other values.
+
+2.  **Start Services**:
+    ```bash
+    docker-compose up -d --build
+    ```
+
+3.  **Access Services**:
+    -   **API**: `https://localhost/docs` (Accept self-signed cert warning)
+    -   **Traefik Dashboard**: `http://localhost:8080/dashboard/`
+
+4.  **Extension Configuration**:
+    -   Ensure the extension is configured to use `http://localhost` (default).

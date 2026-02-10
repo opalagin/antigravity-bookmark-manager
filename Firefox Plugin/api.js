@@ -1,4 +1,4 @@
-const API_BASE_URL = 'http://localhost:8000';
+// API Base URL is now dynamic via browser.storage.local
 
 const api = {
     token: null,
@@ -16,13 +16,17 @@ const api = {
             throw new Error("No Auth Token. Please login.");
         }
 
+        // Get Base URL from storage or default
+        const result = await browser.storage.local.get("apiUrl");
+        const baseUrl = result.apiUrl || "http://localhost";
+
         const headers = {
             'Content-Type': 'application/json',
             'Authorization': `Bearer ${this.token}`,
             ...options.headers
         };
 
-        const response = await fetch(`${API_BASE_URL}${endpoint}`, {
+        const response = await fetch(`${baseUrl}${endpoint}`, {
             ...options,
             headers: headers
         });

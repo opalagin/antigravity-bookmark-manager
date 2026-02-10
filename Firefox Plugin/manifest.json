@@ -13,13 +13,18 @@
         "default_popup": "popup.html",
         "default_title": "Smart Bookmark Manager"
     },
+    "options_ui": {
+        "page": "options.html",
+        "browser_style": true
+    },
     "sidebar_action": {
         "default_panel": "sidebar.html",
         "default_title": "Smart Bookmarks",
         "default_icon": "icons/icon.png"
     },
     "host_permissions": [
-        "http://localhost:8000/*"
+        "http://localhost/*",
+        "https://localhost/*"
     ],
     "background": {
         "scripts": [
