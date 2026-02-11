@@ -10,6 +10,29 @@ document.addEventListener('DOMContentLoaded', () => {
         sendBtn.disabled = !this.value.trim();
     });
 
+    // --- Auth Initialization ---
+    async function checkAuth() {
+        if (!window.api) return;
+        const stored = await browser.storage.local.get('authToken');
+        if (stored.authToken) {
+            window.api.setToken(stored.authToken);
+        }
+    }
+
+    // Listen for login/logout events from popup
+    browser.storage.onChanged.addListener((changes, area) => {
+        if (area === 'local' && changes.authToken) {
+            if (changes.authToken.newValue) {
+                window.api.setToken(changes.authToken.newValue);
+            } else {
+                window.api.setToken(null);
+            }
+        }
+    });
+
+    // Initial check
+    checkAuth();
+
     // Handle Send
     async function sendMessage() {
         const text = chatInput.value.trim();
