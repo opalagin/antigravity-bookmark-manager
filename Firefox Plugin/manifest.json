@@ -14,8 +14,7 @@
         "default_title": "Smart Bookmark Manager"
     },
     "options_ui": {
-        "page": "options.html",
-        "browser_style": true
+        "page": "options.html"
     },
     "sidebar_action": {
         "default_panel": "sidebar.html",

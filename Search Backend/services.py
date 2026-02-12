@@ -108,14 +108,31 @@ class SearchService:
         # 2. Vector Search with Join
         # Return tuple (BookmarkEmbedding, Bookmark)
         # Filter by user_id on Bookmark
+        # Fetch more candidates than limit to allow for deduplication
+        candidate_limit = limit * 4 
+        
         stmt = select(BookmarkEmbedding, Bookmark).join(Bookmark).where(
             Bookmark.user_id == user_id
         ).order_by(
             BookmarkEmbedding.embedding.cosine_distance(query_vector)
-        ).limit(limit)
+        ).limit(candidate_limit)
         
         result = await session.execute(stmt)
-        return result.all()
+        all_matches = result.all()
+        
+        # Deduplicate: Keep only the best matching chunk per bookmark
+        unique_results = []
+        seen_bookmarks = set()
+        
+        for embedding, bookmark in all_matches:
+            if bookmark.id not in seen_bookmarks:
+                unique_results.append((embedding, bookmark))
+                seen_bookmarks.add(bookmark.id)
+                
+            if len(unique_results) >= limit:
+                break
+                
+        return unique_results
 
     async def chat(self, session: AsyncSession, user_id: str, query: str) -> tuple[str, List[str]]:
         # 1. Retrieve Context

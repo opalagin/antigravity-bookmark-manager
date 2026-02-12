@@ -92,9 +92,26 @@ document.addEventListener('DOMContentLoaded', () => {
         element.classList.remove('loading');
         const contentDiv = element.querySelector('.content');
 
-        // Simple Markdown-ish rendering (just newlines for now)
-        // In a real app, use a library like 'marked'
-        contentDiv.innerHTML = newText.replace(/\n/g, '<br>');
+        // Render Markdown
+        // Configure marked to open links in new tabs
+        if (window.marked) {
+            try {
+                contentDiv.innerHTML = window.marked.parse(newText);
+
+                // Post-process links to open in new tab
+                const links = contentDiv.getElementsByTagName('a');
+                for (let link of links) {
+                    link.target = '_blank';
+                    link.rel = 'noopener noreferrer';
+                }
+            } catch (e) {
+                console.error("Markdown parse error:", e);
+                contentDiv.textContent = newText;
+            }
+        } else {
+            contentDiv.textContent = newText;
+        }
+
         history.scrollTop = history.scrollHeight;
     }
 });

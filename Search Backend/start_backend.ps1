@@ -4,6 +4,28 @@ if (-not (Get-Command python -ErrorAction SilentlyContinue)) {
     exit 1
 }
 
+# Load .env file
+$envFile = ".env"
+if (-not (Test-Path $envFile)) {
+    $envFile = "..\.env"
+}
+
+if (Test-Path $envFile) {
+    Write-Host "Loading environment variables from $envFile..." -ForegroundColor Cyan
+    Get-Content $envFile | ForEach-Object {
+        $line = $_.Trim()
+        if ($line -and -not $line.StartsWith("#")) {
+            $name, $value = $line.Split("=", 2)
+            if ($name -and $value) {
+                [System.Environment]::SetEnvironmentVariable($name, $value, [System.EnvironmentVariableTarget]::Process)
+            }
+        }
+    }
+}
+else {
+    Write-Host "Warning: .env file not found." -ForegroundColor Yellow
+}
+
 # Create venv if it doesn't exist
 if (-not (Test-Path .venv)) {
     Write-Host "Creating virtual environment..." -ForegroundColor Cyan
