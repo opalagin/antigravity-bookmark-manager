@@ -2,6 +2,11 @@
     "manifest_version": 3,
     "name": "Smart Bookmark Manager",
     "version": "1.0",
+    "browser_specific_settings": {
+        "gecko": {
+            "id": "smart-bookmark-manager@antigravity.local"
+        }
+    },
     "description": "AI-powered personal knowledge base for your bookmarks.",
     "permissions": [
         "activeTab",
@@ -19,7 +24,7 @@
     "sidebar_action": {
         "default_panel": "sidebar.html",
         "default_title": "Smart Bookmarks",
-        "default_icon": "icons/icon.png"
+        "default_icon": "icons/icon.svg"
     },
     "host_permissions": [
         "http://localhost/*",
