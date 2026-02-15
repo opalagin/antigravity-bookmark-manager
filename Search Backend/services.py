@@ -158,10 +158,31 @@ class SearchService:
         try:
             client = AsyncOpenAI(api_key=api_key)
             response = await client.chat.completions.create(
-                model="gpt-4o-mini",
+                model="gpt-5-mini",
                 messages=[
-                    {"role": "system", "content": "You are a helpful assistant. Answer the user's question using ONLY the provided context. If the answer is not in the context, say you don't know."},
-                    {"role": "user", "content": f"Context:\n{context_text}\n\nQuestion: {query}"}
+                    {"role": "system", "content": """
+You are an expert software engineering assistant.
+
+You answer questions strictly using the provided article context.
+
+Rules:
+- Use ONLY the provided context.
+- Do NOT use outside knowledge.
+- If the answer is not clearly supported or your confidence is low, just say "I don't know based on the provided context."
+- Do not infer or assume missing information.
+- If partial information exists, clearly state the limitations.
+
+Formatting requirements:
+- Provide a structured answer.
+- Trail your answer with a list of sources (URLs).
+- Use headings when helpful.
+- Use bullet points for lists.
+- Use code blocks for code snippets.
+- Be precise and technically accurate.
+- Avoid unnecessary verbosity.
+"""
+                    },
+                    {"role": "user", "content": f"Context:\n{context_text}\n\nQuestion: {query}\n\nSources:\n{sources}"}
                 ]
             )
             return response.choices[0].message.content, sources
