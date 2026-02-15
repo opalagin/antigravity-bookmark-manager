@@ -13,8 +13,8 @@ services:
       - "--entrypoints.websecure.address=:443"
       - "--entrypoints.web.http.redirections.entryPoint.to=websecure"
       - "--entrypoints.web.http.redirections.entryPoint.scheme=https"
-      - "--certificatesresolvers.le.acme.httpchallenge=true"
-      - "--certificatesresolvers.le.acme.httpchallenge.entrypoint=web"
+      - "--certificatesresolvers.le.acme.dnschallenge=true"
+      - "--certificatesresolvers.le.acme.dnschallenge.provider=route53"
       # - "--certificatesresolvers.le.acme.caserver=https://acme-staging-v02.api.letsencrypt.org/directory" # Comment out for production
       - "--certificatesresolvers.le.acme.email=${ACME_EMAIL}"
       - "--certificatesresolvers.le.acme.storage=/letsencrypt/acme.json"
@@ -22,6 +22,10 @@ services:
       - "80:80"
       - "443:443"
       - "8080:8080" # Traefik dashboard
+    environment:
+      - AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID}
+      - AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY}
+      - AWS_REGION=us-east-1 # Default to us-east-1 if not specified
     volumes:
       - "/var/run/docker.sock:/var/run/docker.sock:ro"
       - "letsencrypt:/letsencrypt"
@@ -48,9 +52,10 @@ services:
       retries: 5
 
   backend:
-    build:
-      context: ./Search Backend
-      dockerfile: Dockerfile
+    # build:
+    #   context: ./Search Backend
+    #   dockerfile: Dockerfile
+    image: ${DOCKER_USERNAME}/ai-bookmanager-backend:latest
     container_name: search_backend
     restart: always
     environment:
