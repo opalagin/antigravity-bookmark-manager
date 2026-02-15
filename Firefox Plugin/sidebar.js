@@ -57,7 +57,12 @@ document.addEventListener('DOMContentLoaded', () => {
 
         } catch (error) {
             console.error(error);
-            updateMessage(loadingId, "Sorry, something went wrong: " + error.message);
+
+            if (error.message.includes("Pilot Mode") || error.message.includes("Access Denied")) {
+                updateMessage(loadingId, "🚫 **Access Denied**: You are not authorized to use the chat in Pilot Mode.");
+            } else {
+                updateMessage(loadingId, "Sorry, something went wrong: " + error.message);
+            }
         }
     }
 

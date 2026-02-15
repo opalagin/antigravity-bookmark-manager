@@ -61,6 +61,14 @@
 *   **Transport**: HTTPS only for all endpoints.
 *   **Persistence**: Database storage persisted to Docker volumes.
 
+### 3.4 Security Refinements (Pilot Phase)
+*   **Pilot Mode**: Access restricted to an allowlist of users.
+*   **User Identification**: Users identified via Email (provider: Google).
+*   **Access Control**:
+    *   Check authenticated user's email against `allowed_users` table.
+    *   If not allowed, reject with 403 Forbidden and "Pilot Mode" message.
+*   **Rate Limiting**: Implement API Rate Limiting (e.g., via `slowapi`) to prevent abuse.
+
 ## 4. Data Model (PostgreSQL)
 
 ### `bookmarks`
@@ -82,6 +90,12 @@
 | `chunk_index` | INT | Sequence number |
 | `chunk_text` | TEXT | Context text |
 | `embedding` | VECTOR(1536) | Vector data |
+
+### `allowed_users`
+| Column | Type | Description |
+| :--- | :--- | :--- |
+| `email` | TEXT | Primary Key, Allowed User Email |
+| `created_at` | TIMESTAMPTZ | Timestamp |
 
 ## 5. Interface Design (Firefox Extension)
 

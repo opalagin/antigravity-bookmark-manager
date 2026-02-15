@@ -60,6 +60,20 @@ document.addEventListener('DOMContentLoaded', () => {
 
         } catch (error) {
             console.error("Save failed:", error);
+
+            if (error.message.includes("Pilot Mode") || error.message.includes("Access Denied")) {
+                document.body.innerHTML = `
+                    <div class="result-container error">
+                        <div class="icon">🚫</div>
+                        <h3>Access Denied</h3>
+                        <p>We are currently in <strong>Pilot Mode</strong>.</p>
+                        <p>Your email is not on the allowed list.</p>
+                        <button onclick="window.close()" class="primary-btn">Close</button>
+                    </div>
+                `;
+                return;
+            }
+
             saveBtn.innerHTML = '<span class="icon">❌</span> Error';
             saveBtn.title = error.message;
             saveBtn.style.backgroundColor = '#d63031';
@@ -96,7 +110,17 @@ document.addEventListener('DOMContentLoaded', () => {
                 renderBookmarks(results);
             } catch (error) {
                 console.error("Search failed:", error);
-                bookmarksList.innerHTML = `<li class="empty-state">Error: ${error.message}</li>`;
+
+                if (error.message.includes("Pilot Mode") || error.message.includes("Access Denied")) {
+                    bookmarksList.innerHTML = `
+                        <li class="empty-state error-state">
+                            <strong>Access Denied</strong><br>
+                            You are not authorized to use the search in Pilot Mode.
+                        </li>
+                    `;
+                } else {
+                    bookmarksList.innerHTML = `<li class="empty-state">Error: ${error.message}</li>`;
+                }
             }
         }, 300); // 300ms debounce
     });
@@ -134,8 +158,17 @@ document.addEventListener('DOMContentLoaded', () => {
             }
         } catch (error) {
             console.error("Recent fetch failed:", error);
-            bookmarksList.innerHTML = `<li class="empty-state">Unable to load recent.</li>`;
-            // Silent fail for user, just show empty or error state
+
+            if (error.message.includes("Pilot Mode") || error.message.includes("Access Denied")) {
+                bookmarksList.innerHTML = `
+                    <li class="empty-state error-state">
+                        <strong>Access Denied</strong><br>
+                        You are not authorized to view bookmarks in Pilot Mode.
+                    </li>
+                `;
+            } else {
+                bookmarksList.innerHTML = `<li class="empty-state">Error: ${error.message}</li>`;
+            }
         }
     }
 

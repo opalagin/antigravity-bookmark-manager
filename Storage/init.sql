@@ -30,3 +30,10 @@ CREATE INDEX IF NOT EXISTS embedding_idx ON bookmark_embeddings USING hnsw (embe
 
 -- Index for foreign key performance
 CREATE INDEX IF NOT EXISTS idx_bookmark_embeddings_bookmark_id ON bookmark_embeddings(bookmark_id);
+
+-- Table for Pilot Mode Allowed Users
+CREATE TABLE IF NOT EXISTS allowed_users (
+    email TEXT PRIMARY KEY,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+

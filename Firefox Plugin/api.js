@@ -33,7 +33,12 @@ const api = {
 
         if (!response.ok) {
             if (response.status === 401) {
-                throw new Error("Unauthorized");
+                const errorData = await response.json().catch(() => ({}));
+                throw new Error(errorData.detail || "Unauthorized");
+            }
+            if (response.status === 403) {
+                const errorData = await response.json().catch(() => ({}));
+                throw new Error(errorData.detail || "Pilot Mode Access Denied");
             }
             const errorData = await response.json();
             throw new Error(errorData.detail || 'API Request Failed');

@@ -11,3 +11,4 @@ sentence-transformers>=2.3.1
 python-multipart
 pyjwt>=2.8.0
 requests>=2.31.0
+slowapi>=0.1.9

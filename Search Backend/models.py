@@ -34,3 +34,12 @@ class BookmarkEmbedding(SQLModel, table=True):
     
     # Relationship
     bookmark: Optional[Bookmark] = Relationship(back_populates="embeddings")
+
+class AllowedUser(SQLModel, table=True):
+    __tablename__ = "allowed_users"
+    
+    email: str = Field(primary_key=True)
+    created_at: Optional[datetime] = Field(
+        sa_column=Column(TIMESTAMP(timezone=True), server_default=func.now())
+    )
+
