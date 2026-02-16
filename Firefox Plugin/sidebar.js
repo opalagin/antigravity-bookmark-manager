@@ -101,14 +101,30 @@ document.addEventListener('DOMContentLoaded', () => {
         // Configure marked to open links in new tabs
         if (window.marked) {
             try {
-                contentDiv.innerHTML = window.marked.parse(newText);
+                // Use DOMParser to safely parse HTML from marked
+                const htmlContent = window.marked.parse(newText);
+                const parser = new DOMParser();
+                const doc = parser.parseFromString(htmlContent, 'text/html');
 
-                // Post-process links to open in new tab
-                const links = contentDiv.getElementsByTagName('a');
-                for (let link of links) {
-                    link.target = '_blank';
-                    link.rel = 'noopener noreferrer';
+                contentDiv.innerHTML = ''; // Clear existing content
+
+                // Move children from doc.body to contentDiv
+                while (doc.body.firstChild) {
+                    const child = doc.body.firstChild;
+                    // Post-process links to open in new tab
+                    if (child.tagName === 'A') {
+                        child.target = '_blank';
+                        child.rel = 'noopener noreferrer';
+                    }
+                    // Also check for nested links if necessary, though top-level is common in simple markdown
+                    const links = child.getElementsByTagName ? child.getElementsByTagName('a') : [];
+                    for (let link of links) {
+                        link.target = '_blank';
+                        link.rel = 'noopener noreferrer';
+                    }
+                    contentDiv.appendChild(child);
                 }
+
             } catch (e) {
                 console.error("Markdown parse error:", e);
                 contentDiv.textContent = newText;

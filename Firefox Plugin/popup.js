@@ -3,13 +3,24 @@ document.addEventListener('DOMContentLoaded', () => {
     const searchInput = document.getElementById('search-input');
     const bookmarksList = document.getElementById('bookmarks-list');
 
+    // Helper for safe HTML setting
+    function setSafeHTML(element, html) {
+        element.innerHTML = ""; // Clear
+        const parser = new DOMParser();
+        const doc = parser.parseFromString(html, 'text/html');
+        while (doc.body.firstChild) {
+            element.appendChild(doc.body.firstChild);
+        }
+    }
+
     // 1. Handle Save Button Click
     saveBtn.addEventListener('click', async () => {
         try {
             // Loading state
             saveBtn.disabled = true;
-            const originalText = saveBtn.innerHTML;
-            saveBtn.innerHTML = '<span class="icon">⏳</span> Saving...';
+            const originalText = saveBtn.textContent;
+            // saveBtn.innerHTML = '<span class="icon">⏳</span> Saving...';
+            setSafeHTML(saveBtn, '<span class="icon">⏳</span> Saving...');
 
             // Get current tab
             const tabs = await browser.tabs.query({ active: true, currentWindow: true });
@@ -49,11 +60,13 @@ document.addEventListener('DOMContentLoaded', () => {
             );
 
             // Success feedback
-            saveBtn.innerHTML = '<span class="icon">✅</span> Saved!';
+            // saveBtn.innerHTML = '<span class="icon">✅</span> Saved!';
+            setSafeHTML(saveBtn, '<span class="icon">✅</span> Saved!');
             saveBtn.style.backgroundColor = '#00b894';
 
             setTimeout(() => {
-                saveBtn.innerHTML = originalText;
+                // saveBtn.innerHTML = originalText;
+                saveBtn.textContent = originalText;
                 saveBtn.style.backgroundColor = '';
                 saveBtn.disabled = false;
             }, 1500);
@@ -62,26 +75,31 @@ document.addEventListener('DOMContentLoaded', () => {
             console.error("Save failed:", error);
 
             if (error.message.includes("Pilot Mode") || error.message.includes("Access Denied")) {
-                document.body.innerHTML = `
+                // document.body.innerHTML = ...
+                const errorContainer = `
                     <div class="result-container error">
                         <div class="icon">🚫</div>
                         <h3>Access Denied</h3>
                         <p>We are currently in <strong>Pilot Mode</strong>.</p>
                         <p>Your email is not on the allowed list.</p>
-                        <button onclick="window.close()" class="primary-btn">Close</button>
+                        <button id="close-btn" class="primary-btn">Close</button>
                     </div>
                 `;
+                setSafeHTML(document.body, errorContainer);
+                document.getElementById('close-btn').onclick = () => window.close();
                 return;
             }
 
-            saveBtn.innerHTML = '<span class="icon">❌</span> Error';
+            // saveBtn.innerHTML = '<span class="icon">❌</span> Error';
+            setSafeHTML(saveBtn, '<span class="icon">❌</span> Error');
             saveBtn.title = error.message;
             saveBtn.style.backgroundColor = '#d63031';
 
             setTimeout(() => {
-                saveBtn.innerHTML = originalText; // Reset to original text "Save Current Page"
+                // saveBtn.innerHTML = originalText; // Reset to original text "Save Current Page"
+                saveBtn.textContent = originalText;
                 if (originalText.includes('Saved')) { // Safety check if text was stale
-                    saveBtn.innerHTML = '<span class="icon">🔖</span> Save Current Page';
+                    setSafeHTML(saveBtn, '<span class="icon">🔖</span> Save Current Page');
                 }
                 saveBtn.title = '';
                 saveBtn.style.backgroundColor = '';
@@ -98,12 +116,14 @@ document.addEventListener('DOMContentLoaded', () => {
         clearTimeout(debounceTimer);
         debounceTimer = setTimeout(async () => {
             if (!query.trim()) {
-                bookmarksList.innerHTML = '<li class="empty-state">Start typing to search...</li>';
+                // bookmarksList.innerHTML = '<li class="empty-state">Start typing to search...</li>';
+                setSafeHTML(bookmarksList, '<li class="empty-state">Start typing to search...</li>');
                 return;
             }
 
             try {
-                bookmarksList.innerHTML = '<li class="empty-state">Searching...</li>';
+                // bookmarksList.innerHTML = '<li class="empty-state">Searching...</li>';
+                setSafeHTML(bookmarksList, '<li class="empty-state">Searching...</li>');
                 if (!window.api) throw new Error("API client not loaded");
 
                 const results = await window.api.searchBookmarks(query);
@@ -112,14 +132,14 @@ document.addEventListener('DOMContentLoaded', () => {
                 console.error("Search failed:", error);
 
                 if (error.message.includes("Pilot Mode") || error.message.includes("Access Denied")) {
-                    bookmarksList.innerHTML = `
+                    setSafeHTML(bookmarksList, `
                         <li class="empty-state error-state">
                             <strong>Access Denied</strong><br>
                             You are not authorized to use the search in Pilot Mode.
                         </li>
-                    `;
+                    `);
                 } else {
-                    bookmarksList.innerHTML = `<li class="empty-state">Error: ${error.message}</li>`;
+                    setSafeHTML(bookmarksList, `<li class="empty-state">Error: ${error.message}</li>`);
                 }
             }
         }, 300); // 300ms debounce
@@ -129,7 +149,7 @@ document.addEventListener('DOMContentLoaded', () => {
     function renderBookmarks(bookmarks) {
         bookmarksList.innerHTML = '';
         if (bookmarks.length === 0) {
-            bookmarksList.innerHTML = '<li class="empty-state">No results found</li>';
+            setSafeHTML(bookmarksList, '<li class="empty-state">No results found</li>');
             return;
         }
 
@@ -147,27 +167,27 @@ document.addEventListener('DOMContentLoaded', () => {
     // Initial state: Load recent bookmarks
     async function loadRecent() {
         try {
-            bookmarksList.innerHTML = '<li class="empty-state">Loading recent...</li>';
+            setSafeHTML(bookmarksList, '<li class="empty-state">Loading recent...</li>');
             if (!window.api) throw new Error("API client not loaded");
 
             const recent = await window.api.getRecent(10);
             renderBookmarks(recent);
 
             if (recent.length === 0) {
-                bookmarksList.innerHTML = '<li class="empty-state">No bookmarks saved yet.</li>';
+                setSafeHTML(bookmarksList, '<li class="empty-state">No bookmarks saved yet.</li>');
             }
         } catch (error) {
             console.error("Recent fetch failed:", error);
 
             if (error.message.includes("Pilot Mode") || error.message.includes("Access Denied")) {
-                bookmarksList.innerHTML = `
+                setSafeHTML(bookmarksList, `
                     <li class="empty-state error-state">
                         <strong>Access Denied</strong><br>
                         You are not authorized to view bookmarks in Pilot Mode.
                     </li>
-                `;
+                `);
             } else {
-                bookmarksList.innerHTML = `<li class="empty-state">Error: ${error.message}</li>`;
+                setSafeHTML(bookmarksList, `<li class="empty-state">Error: ${error.message}</li>`);
             }
         }
     }
@@ -214,7 +234,7 @@ document.addEventListener('DOMContentLoaded', () => {
         const existingLogout = document.getElementById('logout-btn');
         if (existingLogout) existingLogout.remove();
 
-        bookmarksList.innerHTML = `
+        setSafeHTML(bookmarksList, `
             <div class="login-container">
                 <p>Please login to save bookmarks.</p>
                 <button id="login-btn" class="primary-btn" style="background-color: #4285F4;">Login with Google</button>
@@ -222,11 +242,11 @@ document.addEventListener('DOMContentLoaded', () => {
                     Note: Requires configured Client ID
                 </div>
             </div>
-        `;
+        `);
 
         document.getElementById('login-btn').addEventListener('click', async () => {
             try {
-                bookmarksList.innerHTML = '<li class="empty-state">Authenticating...</li>';
+                setSafeHTML(bookmarksList, '<li class="empty-state">Authenticating...</li>');
 
                 // CLIENT CONFIGURATION
                 // TODO: User must replace this with their actual Client ID from Google Console
@@ -251,7 +271,7 @@ document.addEventListener('DOMContentLoaded', () => {
                         await browser.storage.local.set({ authToken: token });
                         api.setToken(token);
                         showLogoutButton();
-                        bookmarksList.innerHTML = '<li class="empty-state">Logged in! Loading...</li>';
+                        setSafeHTML(bookmarksList, '<li class="empty-state">Logged in! Loading...</li>');
                         loadRecent();
                     } else {
                         throw new Error("No access token found in redirect.");
@@ -259,12 +279,12 @@ document.addEventListener('DOMContentLoaded', () => {
                 }
             } catch (error) {
                 console.error("Auth Failed:", error);
-                bookmarksList.innerHTML = `
+                setSafeHTML(bookmarksList, `
                     <li class="empty-state error-state">
                         Authentication Failed: ${error.message}<br>
                         <small>Check Client ID and Redirect URI in popup.js</small>
                     </li>
-                `;
+                `);
                 // Re-show login button after a delay or let user retry
                 setTimeout(showLogin, 5000);
             }

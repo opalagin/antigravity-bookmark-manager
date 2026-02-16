@@ -15,6 +15,10 @@ An AI-powered personal knowledge base that allows you to "chat with your reading
     *   **PostgreSQL + pgvector**: Stores bookmark metadata and vector embeddings.
     *   **AI Integration**: Connected to OpenAI (`gpt-4o-mini`) for generating answers.
 
+## Public Artifacts
+
+Firefox Plugin: http://blog.apalagin.net/download/5f8f707b4ba9441c8e63-1.0.7.xpi
+
 ## ⚠️ Configuration Required
 
 Before running, you **must** configure the following:

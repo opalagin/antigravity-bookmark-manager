@@ -1,10 +1,16 @@
 {
     "manifest_version": 3,
     "name": "Smart Bookmark Manager",
-    "version": "1.0",
+    "version": "1.0.7",
     "browser_specific_settings": {
         "gecko": {
-            "id": "smart-bookmark-manager@antigravity.local"
+            "id": "smart-bookmark-manager@antigravity.local",
+            "data_collection_permissions": {
+                "required": [
+                    "none"
+                ],
+                "optional": []
+            }
         }
     },
     "description": "AI-powered personal knowledge base for your bookmarks.",

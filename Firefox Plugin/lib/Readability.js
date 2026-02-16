@@ -104,7 +104,7 @@ function Readability(doc, options) {
       }
     };
   } else {
-    this.log = function () {};
+    this.log = function () { };
   }
 }
 
@@ -649,10 +649,10 @@ Readability.prototype = {
       curTitleWordCount <= 4 &&
       (!titleHadHierarchicalSeparators ||
         curTitleWordCount !=
-          wordCount(
-            origTitle.replace(new RegExp(`\\s[${titleSeparators}]\\s`, "g"), "")
-          ) -
-            1)
+        wordCount(
+          origTitle.replace(new RegExp(`\\s[${titleSeparators}]\\s`, "g"), "")
+        ) -
+        1)
     ) {
       curTitle = origTitle;
     }
@@ -1141,9 +1141,9 @@ Readability.prototype = {
           if (this.UNLIKELY_ROLES.includes(node.getAttribute("role"))) {
             this.log(
               "Removing content with role " +
-                node.getAttribute("role") +
-                " - " +
-                matchString
+              node.getAttribute("role") +
+              " - " +
+              matchString
             );
             node = this._removeAndGetNext(node);
             continue;
@@ -1358,7 +1358,7 @@ Readability.prototype = {
         for (var i = 1; i < topCandidates.length; i++) {
           if (
             topCandidates[i].readability.contentScore /
-              topCandidate.readability.contentScore >=
+            topCandidate.readability.contentScore >=
             0.75
           ) {
             alternativeCandidateAncestors.push(
@@ -1486,7 +1486,7 @@ Readability.prototype = {
           if (
             sibling.readability &&
             sibling.readability.contentScore + contentBonus >=
-              siblingScoreThreshold
+            siblingScoreThreshold
           ) {
             append = true;
           } else if (sibling.nodeName === "P") {
@@ -1572,7 +1572,15 @@ Readability.prototype = {
       if (textLength < this._charThreshold) {
         parseSuccessful = false;
         // eslint-disable-next-line no-unsanitized/property
-        page.innerHTML = pageCacheHtml;
+        // eslint-disable-next-line no-unsanitized/property
+        var parser = new DOMParser();
+        var doc = parser.parseFromString(pageCacheHtml, "text/html");
+        while (page.firstChild) {
+          page.removeChild(page.firstChild);
+        }
+        while (doc.body.firstChild) {
+          page.appendChild(doc.body.firstChild);
+        }
 
         this._attempts.push({
           articleContent,
@@ -1843,7 +1851,7 @@ Readability.prototype = {
 
     const articleAuthor =
       typeof values["article:author"] === "string" &&
-      !this._isUrl(values["article:author"])
+        !this._isUrl(values["article:author"])
         ? values["article:author"]
         : undefined;
 
@@ -1951,7 +1959,13 @@ Readability.prototype = {
       // (Also we heavily discourage people from allowing script to
       // run at all in this document...)
       // eslint-disable-next-line no-unsanitized/property
-      tmp.innerHTML = noscript.innerHTML;
+      // eslint-disable-next-line no-unsanitized/property
+      var parser = new DOMParser();
+      var doc = parser.parseFromString(noscript.innerHTML, "text/html");
+
+      while (doc.body.firstChild) {
+        tmp.appendChild(doc.body.firstChild);
+      }
 
       // If noscript has previous sibling and it only contains image,
       // replace it with noscript content. However we also keep old
@@ -2031,8 +2045,8 @@ Readability.prototype = {
       !node.textContent.trim().length &&
       (!node.children.length ||
         node.children.length ==
-          node.getElementsByTagName("br").length +
-            node.getElementsByTagName("hr").length)
+        node.getElementsByTagName("br").length +
+        node.getElementsByTagName("hr").length)
     );
   },
 
