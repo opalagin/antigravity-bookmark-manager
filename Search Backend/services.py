@@ -135,7 +135,8 @@ class SearchService:
         return unique_results
 
     async def chat(self, session: AsyncSession, user_id: str, query: str) -> tuple[str, List[str]]:
-        # 1. Retrieve Context
+        # 1. Retrieve Context (Get more candidates to find unique bookmarks)
+        # Re-using search but looking for top unique bookmarks
         results = await self.search(session, user_id, query, limit=5)
         
         if not results:
@@ -144,26 +145,43 @@ class SearchService:
         context_text = ""
         sources = []
         
-        for i, (embedding_entry, bookmark) in enumerate(results):
-            context_text += f"Source {i+1} ({bookmark.title}): {embedding_entry.chunk_text}\n\n"
+        # Deduplicate and take top 3 unique bookmarks
+        unique_bookmarks = []
+        seen_ids = set()
+        
+        for embedding_entry, bookmark in results:
+            if bookmark.id not in seen_ids:
+                unique_bookmarks.append(bookmark)
+                seen_ids.add(bookmark.id)
+                if len(unique_bookmarks) >= 3:
+                    break
+        
+        for i, bookmark in enumerate(unique_bookmarks):
+            # Use FULL content (truncate if extremely large, but for now take all)
+            # A safety truncation could be added here if needed (e.g. [:20000])
+            content = bookmark.content_markdown or ""
+            context_text += f"Source {i+1} ({bookmark.title}):\n{content}\n\n"
             sources.append(bookmark.url)
             
+        print(f"--- Sending Context ({len(context_text)} chars) ---\n{context_text[:500]}...\n--- End Preview ---")
+
         # 2. LLM Generation
         api_key = os.getenv("OPENAI_API_KEY")
         if not api_key:
             # Fallback Mock
-            answer = f"**[Mock AI Response]**\n\nBased on your bookmarks, here is what I found:\n\n{context_text}\n\n*Note: Set OPENAI_API_KEY to get real answers.*"
+            answer = f"**[Mock AI Response]**\n\nBased on your bookmarks, here is what I found:\n\n{context_text[:500]}... (truncated for mock)\n\n*Note: Set OPENAI_API_KEY to get real answers.*"
             return answer, sources
 
         try:
             client = AsyncOpenAI(api_key=api_key)
             response = await client.chat.completions.create(
-                model="gpt-5-mini",
+                model="gpt-4o-mini",
                 messages=[
                     {"role": "system", "content": """
-You are an expert software engineering assistant.
+You are a helpful assistant oriented to guide users in finding relevant information from their bookmarks.
 
-You answer questions strictly using the provided article context.
+You are provided with the FULL TEXT of the top relevant articles.
+Answer questions strictly using the provided article context.
 
 Rules:
 - Use ONLY the provided context.
