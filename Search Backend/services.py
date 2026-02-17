@@ -101,32 +101,41 @@ class SearchService:
     def __init__(self, embedding_service: EmbeddingService):
         self.embedding_service = embedding_service
 
-    async def search(self, session: AsyncSession, user_id: str, query: str, limit: int = 5):
+    async def search(self, session: AsyncSession, user_id: str, query: str, limit: int = 5, threshold: float = 0.7):
         # 1. Embed Query
         query_vector = await self.embedding_service.embed_query(query)
         
         # 2. Vector Search with Join
-        # Return tuple (BookmarkEmbedding, Bookmark)
+        # Return tuple (BookmarkEmbedding, Bookmark, distance)
         # Filter by user_id on Bookmark
-        # Fetch more candidates than limit to allow for deduplication
+        # Fetch more candidates than limit to allow for deduplication AND threshold filtering
         candidate_limit = limit * 4 
         
-        stmt = select(BookmarkEmbedding, Bookmark).join(Bookmark).where(
+        # Define distance expression for selection and ordering
+        distance_col = BookmarkEmbedding.embedding.cosine_distance(query_vector).label("distance")
+        
+        stmt = select(BookmarkEmbedding, Bookmark, distance_col).join(Bookmark).where(
             Bookmark.user_id == user_id
         ).order_by(
-            BookmarkEmbedding.embedding.cosine_distance(query_vector)
+            distance_col
         ).limit(candidate_limit)
         
         result = await session.execute(stmt)
         all_matches = result.all()
         
-        # Deduplicate: Keep only the best matching chunk per bookmark
+        # Deduplicate & Filter: Keep only the best matching chunk per bookmark that meets the threshold
         unique_results = []
         seen_bookmarks = set()
         
-        for embedding, bookmark in all_matches:
+        for embedding, bookmark, distance in all_matches:
+            # Skip if distance is too high (low similarity)
+            # Cosine distance: 0 = identical, 1 = orthogonal, 2 = opposite
+            # Threshold 0.7 means we accept similarity > 0.3 approx.
+            if distance > threshold:
+                continue
+
             if bookmark.id not in seen_bookmarks:
-                unique_results.append((embedding, bookmark))
+                unique_results.append((embedding, bookmark, distance))
                 seen_bookmarks.add(bookmark.id)
                 
             if len(unique_results) >= limit:
@@ -149,7 +158,7 @@ class SearchService:
         unique_bookmarks = []
         seen_ids = set()
         
-        for embedding_entry, bookmark in results:
+        for embedding_entry, bookmark, _distance in results:
             if bookmark.id not in seen_ids:
                 unique_bookmarks.append(bookmark)
                 seen_ids.add(bookmark.id)

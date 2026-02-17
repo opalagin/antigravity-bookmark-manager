@@ -188,12 +188,13 @@ async def search_bookmarks(
         results = await search_service.search(session, user_id, payload.query, payload.limit)
         
         response_list = []
-        for embedding_entry, bookmark in results:
+        response_list = []
+        for embedding_entry, bookmark, distance in results:
             response_list.append(SearchResult(
                 id=str(bookmark.id),
                 url=bookmark.url,
                 title=bookmark.title,
-                score=0.0, # Not easily available without extra selection, but sorting is correct
+                score=distance, 
                 text=embedding_entry.chunk_text
             ))
             
