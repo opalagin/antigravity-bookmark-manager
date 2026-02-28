@@ -8,6 +8,7 @@ from database import get_session
 import asyncio
 import os
 from openai import AsyncOpenAI
+import httpx
 
 # --- Embedding Service ---
 class EmbeddingService:
@@ -175,18 +176,10 @@ class SearchService:
         print(f"--- Sending Context ({len(context_text)} chars) ---\n{context_text[:500]}...\n--- End Preview ---")
 
         # 2. LLM Generation
+        llm_provider = os.getenv("LLM_PROVIDER", "openai").lower()
         api_key = os.getenv("OPENAI_API_KEY")
-        if not api_key:
-            # Fallback Mock
-            answer = f"**[Mock AI Response]**\n\nBased on your bookmarks, here is what I found:\n\n{context_text[:500]}... (truncated for mock)\n\n*Note: Set OPENAI_API_KEY to get real answers.*"
-            return answer, sources
-
-        try:
-            client = AsyncOpenAI(api_key=api_key)
-            response = await client.chat.completions.create(
-                model="gpt-4o-mini",
-                messages=[
-                    {"role": "system", "content": """
+        
+        system_prompt = """
 You are a helpful assistant oriented to guide users in finding relevant information from their bookmarks.
 
 You are provided with the FULL TEXT of the top relevant articles.
@@ -208,7 +201,38 @@ Formatting requirements:
 - Be precise and technically accurate.
 - Avoid unnecessary verbosity.
 """
-                    },
+
+        if llm_provider == "ollama":
+            ollama_base_url = os.getenv("OLLAMA_BASE_URL", "http://localhost:11434")
+            ollama_model = os.getenv("OLLAMA_MODEL", "mistral:7b-instruct-q4_K_M")
+            try:
+                async with httpx.AsyncClient() as client:
+                    payload = {
+                        "model": ollama_model,
+                        "messages": [
+                            {"role": "system", "content": system_prompt.strip()},
+                            {"role": "user", "content": f"Context:\n{context_text}\n\nQuestion: {query}\n\nSources:\n{sources}"}
+                        ],
+                        "stream": False
+                    }
+                    response = await client.post(f"{ollama_base_url}/api/chat", json=payload, timeout=60.0)
+                    response.raise_for_status()
+                    data = response.json()
+                    return data.get("message", {}).get("content", "Error: No content in response"), sources
+            except Exception as e:
+                return f"Error contacting Ollama: {str(e)}", sources
+
+        if not api_key:
+            # Fallback Mock
+            answer = f"**[Mock AI Response]**\n\nBased on your bookmarks, here is what I found:\n\n{context_text[:500]}... (truncated for mock)\n\n*Note: Set OPENAI_API_KEY to get real answers.*"
+            return answer, sources
+
+        try:
+            client = AsyncOpenAI(api_key=api_key)
+            response = await client.chat.completions.create(
+                model="gpt-4o-mini",
+                messages=[
+                    {"role": "system", "content": system_prompt.strip()},
                     {"role": "user", "content": f"Context:\n{context_text}\n\nQuestion: {query}\n\nSources:\n{sources}"}
                 ]
             )
