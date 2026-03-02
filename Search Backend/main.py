@@ -80,7 +80,7 @@ app.add_middleware(
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 security = HTTPBearer()
 
-import requests
+import httpx
 
 async def get_current_user(
     credentials: HTTPAuthorizationCredentials = Depends(security),
@@ -93,10 +93,11 @@ async def get_current_user(
     # This checks if the access token is valid and returns user info.
     # It is slower than JWT verification but requires less setup (no keys).
     try:
-        response = requests.get(
-            "https://www.googleapis.com/oauth2/v3/userinfo",
-            headers={"Authorization": f"Bearer {token}"}
-        )
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            response = await client.get(
+                "https://www.googleapis.com/oauth2/v3/userinfo",
+                headers={"Authorization": f"Bearer {token}"}
+            )
         
         if response.status_code != 200:
             # Fallback for Development/Testing (Mock Auth if Token is simple string)

@@ -1,23 +1,30 @@
-FROM python:3.11-slim
+# Stage 1: build dependencies
+FROM python:3.11-slim AS builder
+
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    PIP_NO_CACHE_DIR=1
 
 WORKDIR /app
 
-# Install system dependencies
 RUN apt-get update && apt-get install -y \
     build-essential \
-    && rm -rf /var/lib/apt/lists/*
+ && rm -rf /var/lib/apt/lists/*
 
-# Copy requirements
 COPY requirements.txt .
+RUN pip install --prefix=/install -r requirements.txt
 
-# Install python dependencies
-RUN pip install --no-cache-dir -r requirements.txt
+# Stage 2: runtime image
+FROM python:3.11-slim
 
-# Copy application code
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1
+
+WORKDIR /app
+
+# Only copy installed deps and app code
+COPY --from=builder /install /usr/local
 COPY . .
 
-# Expose port
 EXPOSE 8000
-
-# Command to run the application
 CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000"]
