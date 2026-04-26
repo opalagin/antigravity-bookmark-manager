@@ -2,6 +2,7 @@ from fastapi import FastAPI, HTTPException, Depends, Request
 from slowapi import Limiter, _rate_limit_exceeded_handler
 from slowapi.util import get_remote_address
 from slowapi.errors import RateLimitExceeded
+from sqlalchemy import text
 from sqlmodel import select
 
 from pydantic import BaseModel
@@ -38,7 +39,8 @@ class SearchResult(BaseModel):
     id: str
     url: str
     title: Optional[str]
-    score: float # Distance usually, so lower is better for L2, higher for Cos/Inner if converted.
+    score: float  # Cosine distance — lower is closer
+
 class ChatRequest(BaseModel):
     query: str
 
@@ -46,16 +48,55 @@ class ChatResponse(BaseModel):
     answer: str
     sources: List[str]
 
-# ... existing code ...
-
-
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # Startup: Ensure engine is ready
+    # Startup: Idempotently initialize the database schema.
+    # Works on Railway managed Postgres and local Docker Compose alike.
+    async with engine.begin() as conn:
+        await conn.execute(text("CREATE EXTENSION IF NOT EXISTS vector"))
+        await conn.execute(text("""
+            CREATE TABLE IF NOT EXISTS bookmarks (
+                id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+                user_id TEXT NOT NULL,
+                url TEXT NOT NULL,
+                title TEXT,
+                content_markdown TEXT,
+                tags TEXT[],
+                created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+                CONSTRAINT unique_user_url UNIQUE (user_id, url)
+            )
+        """))
+        await conn.execute(text(
+            "CREATE INDEX IF NOT EXISTS idx_bookmarks_user_id ON bookmarks(user_id)"
+        ))
+        await conn.execute(text("""
+            CREATE TABLE IF NOT EXISTS bookmark_embeddings (
+                id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+                bookmark_id UUID REFERENCES bookmarks(id) ON DELETE CASCADE,
+                chunk_index INTEGER NOT NULL,
+                chunk_text TEXT NOT NULL,
+                embedding VECTOR(384)
+            )
+        """))
+        await conn.execute(text(
+            "CREATE INDEX IF NOT EXISTS embedding_idx "
+            "ON bookmark_embeddings USING hnsw (embedding vector_cosine_ops)"
+        ))
+        await conn.execute(text(
+            "CREATE INDEX IF NOT EXISTS idx_bookmark_embeddings_bookmark_id "
+            "ON bookmark_embeddings(bookmark_id)"
+        ))
+        await conn.execute(text("""
+            CREATE TABLE IF NOT EXISTS allowed_users (
+                email TEXT PRIMARY KEY,
+                created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+            )
+        """))
     yield
     # Shutdown
     await engine.dispose()
+
 
 from fastapi.middleware.cors import CORSMiddleware
 
@@ -126,8 +167,6 @@ async def get_current_user(
             is_allowed = result.scalar_one_or_none()
         except Exception as db_err:
              print(f"DB Error checking allowlist: {db_err}")
-             # Let this propagate as 500 or handle it? 
-             # For now, if DB fails, it's NOT an auth error, so re-raising as 500 is better than 401.
              raise HTTPException(status_code=500, detail="Database Error during Auth Check")
         
         if not is_allowed:
@@ -185,10 +224,9 @@ async def search_bookmarks(
     user_id: str = Depends(get_current_user)
 ):
     try:
-        # returns list of (BookmarkEmbedding, Bookmark) tuples
+        # returns list of (BookmarkEmbedding, Bookmark, distance) tuples
         results = await search_service.search(session, user_id, payload.query, payload.limit)
         
-        response_list = []
         response_list = []
         for embedding_entry, bookmark, distance in results:
             response_list.append(SearchResult(
