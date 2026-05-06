@@ -18,7 +18,7 @@
 *   **Frontend / Extension**:
     *   Browser: Firefox (Manifest V3)
     *   Language: JavaScript/HTML/CSS (React or standard JS)
-    *   UI Entry Points: Browser Action (Popup) for quick save/search, Side Panel for persistent chat.
+    *   UI Entry Points: Browser Action (Popup) for quick save/search, Side Panel for persistent chat, Full-page Manager Tab for library curation.
     *   Key Libraries: `Readability.js` (Content extraction), `Turndown` (HTML to Markdown).
 *   **Backend**:
     *   Language: Python
@@ -58,6 +58,7 @@
 ### 3.3 Security & Multi-tenancy
 *   **Authentication**: OAuth2 via Firefox Identity API.
 *   **Authorization**: Backend validates JWT/opaque tokens. Data access strictly scoped to `user_id`.
+*   **Mutation Authorization**: PATCH and DELETE endpoints must verify the target bookmark's `user_id` matches the authenticated user before applying the change. Return 404 (not 403) on mismatch to avoid existence leaks.
 *   **Transport**: HTTPS only for all endpoints.
 *   **Persistence**: Database storage persisted to Docker volumes.
 
@@ -68,6 +69,16 @@
     *   Check authenticated user's email against `allowed_users` table.
     *   If not allowed, reject with 403 Forbidden and "Pilot Mode" message.
 *   **Rate Limiting**: Implement API Rate Limiting (e.g., via `slowapi`) to prevent abuse.
+
+### 3.5 Management Flow (Curate Library)
+*   **User Action**: Open Popup -> click "Manage Library" -> Manager Tab opens in a new browser tab.
+*   **System Action**:
+    1.  Manager fetches a paginated bookmark list (with optional tag-prefix and free-text filters) and the user's tag tree.
+    2.  User can rename a bookmark's title, edit its tags, delete a bookmark, or bulk-select multiple bookmarks to delete or re-tag.
+    3.  "Organize into hierarchy" is performed by editing tags. Dragging a bookmark onto a tag-tree node adds or replaces the corresponding slash-path tag (e.g. dropping onto `work/projects` sets the tag to `work/projects`).
+    4.  Renaming a tag-tree node performs a server-side bulk update: every bookmark whose tag starts with the old prefix gets the prefix rewritten.
+    5.  Deleting a tag-tree node either (a) removes that tag from all matching bookmarks or (b) deletes all matching bookmarks. The user explicitly confirms which.
+    6.  All mutations are scoped to the authenticated `user_id`. Backend cascade-deletes embeddings via the existing `bookmark_embeddings.bookmark_id ON DELETE CASCADE` foreign key.
 
 ## 4. Data Model (PostgreSQL)
 
@@ -81,6 +92,9 @@
 | `content_markdown` | TEXT | Archival content |
 | `tags` | TEXT[] | Array of tags |
 | `created_at` | TIMESTAMPTZ | Timestamp |
+| `updated_at` | TIMESTAMPTZ | Last mutation timestamp (for sort/audit in Manager) |
+
+> **Tag convention**: Tags are stored as a flat string array but interpreted as hierarchical paths using `/` as a separator (e.g. `work/projects/auth`). The Manager UI reconstructs the tag tree client-side. No schema change is needed to support hierarchy.
 
 ### `bookmark_embeddings`
 | Column | Type | Description |
@@ -104,6 +118,7 @@
     *   "Save Current Page" with **Tag Input**.
     *   Simple Search Bar ("Ask your bookmarks...").
     *   Recent Bookmarks list.
+    *   **"Manage Library" button** that opens the full-page Manager Tab.
     *   **User Profile / Logout**.
 
 ### 5.2 Sidebar / Full Page UI (Deep Interaction)
@@ -112,6 +127,31 @@
     *   History of previous queries (optional).
     *   Rich text rendering for AI answers (Markdown support in extension).
 
+### 5.3 Manager UI (Full-Page Tab)
+A dedicated `manager.html` opened in a new browser tab via `browser.tabs.create`. Three-pane layout:
+
+*   **Left Pane — Tag Tree**:
+    *   Collapsible tree built from slash-separated tag paths (e.g. `work/projects/auth`).
+    *   Each node shows the count of bookmarks tagged at or under it.
+    *   Includes virtual nodes: "All bookmarks" (root) and "Untagged".
+    *   Per-node actions: rename (triggers server-side bulk prefix-rewrite) and delete (with confirm dialog choosing between "remove tag from bookmarks" or "delete bookmarks").
+*   **Center Pane — Bookmark Table**:
+    *   Columns: title, URL, tags, created_at, updated_at.
+    *   Sortable, free-text filterable, multi-selectable via checkboxes.
+    *   Pagination or infinite scroll.
+    *   Selecting the active tag-tree node filters the table to that prefix.
+*   **Right Pane — Detail / Edit**:
+    *   Editable title (rename).
+    *   Editable tag chips with autocomplete from the user's existing tags.
+    *   Source URL (read-only, click to open).
+    *   Archived markdown preview (read-only).
+    *   Delete button (confirm dialog).
+*   **Bulk Actions Toolbar** (visible when one or more rows selected): Delete, Add Tag, Remove Tag, Move to Tag (replaces a tag prefix).
+*   **Drag-and-Drop**: Dragging selected bookmarks onto a tag-tree node assigns that tag.
+*   **Empty / Error States**: Friendly empty state for new users; inline toasts for save/delete success and errors.
+
 ## 6. Future Scope
 *   **Local LLM**: Run small model inside browser or locally to reduce API costs.
 *   **Cross-Browser**: Port to Chrome/Edge.
+*   **Drag-to-Reorder Tag Tree**: Persist user-defined ordering of tag-tree nodes (currently alphabetical).
+*   **Saved Views / Smart Filters**: Persisted Manager filters (e.g. "untagged from this month", "no tags + over 30 days old").
