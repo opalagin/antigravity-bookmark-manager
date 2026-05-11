@@ -81,6 +81,42 @@ const api = {
         return this._fetch(`/recent?limit=${limit}`, {
             method: 'GET'
         });
+    },
+
+    async getAllBookmarks(skip = 0, limit = 50, tagPrefix = null, query = null) {
+        let url = `/bookmarks?skip=${skip}&limit=${limit}`;
+        if (tagPrefix) url += `&tag_prefix=${encodeURIComponent(tagPrefix)}`;
+        if (query) url += `&query=${encodeURIComponent(query)}`;
+        return this._fetch(url, { method: 'GET' });
+    },
+
+    async getTags() {
+        return this._fetch('/tags', { method: 'GET' });
+    },
+
+    async updateBookmark(id, data) {
+        return this._fetch(`/bookmarks/${id}`, {
+            method: 'PATCH',
+            body: JSON.stringify(data)
+        });
+    },
+
+    async deleteBookmark(id) {
+        return this._fetch(`/bookmarks/${id}`, { method: 'DELETE' });
+    },
+
+    async bulkUpdateTags(oldPrefix, newPrefix) {
+        return this._fetch('/bookmarks/bulk_update_tags', {
+            method: 'POST',
+            body: JSON.stringify({ old_prefix: oldPrefix, new_prefix: newPrefix })
+        });
+    },
+
+    async bulkDelete(ids) {
+        return this._fetch('/bookmarks/bulk_delete', {
+            method: 'POST',
+            body: JSON.stringify({ bookmark_ids: ids })
+        });
     }
 };
 

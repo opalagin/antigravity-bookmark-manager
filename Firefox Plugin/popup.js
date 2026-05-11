@@ -108,6 +108,14 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     });
 
+    // 1.5 Handle Manage Library
+    const manageBtn = document.getElementById('manage-btn');
+    if (manageBtn) {
+        manageBtn.addEventListener('click', () => {
+            browser.tabs.create({ url: browser.runtime.getURL("manager.html") });
+        });
+    }
+
     // 2. Handle Search Input
     let debounceTimer;
     searchInput.addEventListener('input', (e) => {

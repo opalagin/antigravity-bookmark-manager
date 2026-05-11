@@ -1,0 +1,117 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Smart Bookmark Manager</title>
+    <link rel="stylesheet" href="manager.css">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+</head>
+<body>
+    <header class="app-header">
+        <div class="logo">
+            <span class="icon">📚</span>
+            <h1>Smart Bookmark Manager</h1>
+        </div>
+        <div class="user-actions">
+            <!-- User profile / logout will be injected here if needed -->
+        </div>
+    </header>
+
+    <div class="layout-container">
+        <!-- Left Pane: Tag Tree -->
+        <aside class="left-pane">
+            <div class="pane-header">
+                <h2>Tags</h2>
+            </div>
+            <div class="tree-container" id="tag-tree">
+                <!-- Javascript will populate this -->
+                <div class="loading-state">Loading tags...</div>
+            </div>
+        </aside>
+
+        <!-- Center Pane: Bookmark Table -->
+        <main class="center-pane">
+            <div class="pane-header">
+                <h2 id="current-view-title">All Bookmarks</h2>
+                <div class="search-bar">
+                    <input type="text" id="manager-search-input" placeholder="Search title or URL...">
+                </div>
+            </div>
+            
+            <div class="toolbar" id="bulk-toolbar" style="display: none;">
+                <span class="selected-count" id="selected-count-label">1 selected</span>
+                <button id="bulk-delete-btn" class="danger-btn"><span class="icon">🗑️</span> Delete</button>
+            </div>
+
+            <div class="table-container">
+                <table class="bookmark-table">
+                    <thead>
+                        <tr>
+                            <th width="40"><input type="checkbox" id="select-all-checkbox"></th>
+                            <th>Title</th>
+                            <th>URL</th>
+                            <th>Tags</th>
+                            <th width="120">Date</th>
+                        </tr>
+                    </thead>
+                    <tbody id="bookmark-table-body">
+                        <!-- Javascript will populate this -->
+                    </tbody>
+                </table>
+                <div class="pagination-controls">
+                    <button id="prev-page-btn" disabled>Previous</button>
+                    <span id="page-info">Page 1</span>
+                    <button id="next-page-btn" disabled>Next</button>
+                </div>
+            </div>
+        </main>
+
+        <!-- Right Pane: Detail / Edit -->
+        <aside class="right-pane">
+            <div class="pane-header">
+                <h2>Details</h2>
+            </div>
+            <div class="detail-container" id="detail-pane">
+                <div class="empty-state">Select a bookmark to view details.</div>
+                
+                <form id="edit-form" style="display: none;">
+                    <div class="form-group">
+                        <label for="edit-title">Title</label>
+                        <input type="text" id="edit-title">
+                    </div>
+                    <div class="form-group">
+                        <label for="edit-url">URL</label>
+                        <input type="text" id="edit-url" readonly>
+                        <a href="#" id="edit-url-link" target="_blank" class="external-link">Open</a>
+                    </div>
+                    <div class="form-group">
+                        <label for="edit-tags">Tags (comma separated)</label>
+                        <input type="text" id="edit-tags">
+                    </div>
+                    <div class="actions">
+                        <button type="button" id="save-edit-btn" class="primary-btn">Save Changes</button>
+                        <button type="button" id="delete-single-btn" class="danger-btn">Delete</button>
+                    </div>
+                </form>
+            </div>
+        </aside>
+    </div>
+
+    <!-- Modals for confirmation and rename -->
+    <div id="rename-tag-modal" class="modal">
+        <div class="modal-content">
+            <h3>Rename Tag Prefix</h3>
+            <p>This will update all tags starting with <strong id="old-prefix-display"></strong>.</p>
+            <input type="text" id="new-prefix-input" placeholder="New tag prefix...">
+            <div class="modal-actions">
+                <button id="cancel-rename-btn" class="secondary-btn">Cancel</button>
+                <button id="confirm-rename-btn" class="primary-btn">Rename</button>
+            </div>
+        </div>
+    </div>
+
+    <script src="api.js"></script>
+    <script src="manager.js"></script>
+</body>
+</html>
