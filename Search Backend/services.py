@@ -1,5 +1,6 @@
 from typing import List
 from sqlmodel import select, delete
+from sqlalchemy import func, text
 from sqlmodel.ext.asyncio.session import AsyncSession
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 from sentence_transformers import SentenceTransformer
@@ -9,6 +10,7 @@ import asyncio
 import os
 from openai import AsyncOpenAI
 import httpx
+from datetime import datetime
 
 # --- Embedding Service ---
 class EmbeddingService:
@@ -247,3 +249,139 @@ Formatting requirements:
         return result.scalars().all()
 
 search_service = SearchService(embedding_service)
+
+# --- Management Service ---
+class ManagementService:
+    async def get_bookmarks(self, session: AsyncSession, user_id: str, skip: int = 0, limit: int = 50, tag_prefix: str = None, query: str = None):
+        stmt = select(Bookmark).where(Bookmark.user_id == user_id)
+        
+        if tag_prefix:
+            if tag_prefix == "untagged":
+                stmt = stmt.where((Bookmark.tags == '{}') | (Bookmark.tags == None))
+            else:
+                # Match exact tag or nested tags under this prefix
+                stmt = stmt.where(text("EXISTS (SELECT 1 FROM unnest(tags) tag WHERE tag = :tag_exact OR tag LIKE :tag_prefix)")).params(tag_exact=tag_prefix, tag_prefix=f"{tag_prefix}/%")
+            
+        if query:
+            stmt = stmt.where(Bookmark.title.ilike(f"%{query}%") | Bookmark.url.ilike(f"%{query}%"))
+            
+        # Get total count
+        count_stmt = select(func.count()).select_from(stmt.subquery())
+        total_result = await session.execute(count_stmt)
+        total = total_result.scalar_one()
+        
+        # Get paginated results
+        stmt = stmt.order_by(Bookmark.created_at.desc()).offset(skip).limit(limit)
+        result = await session.execute(stmt)
+        bookmarks = result.scalars().all()
+        
+        return bookmarks, total
+
+    async def get_tags(self, session: AsyncSession, user_id: str):
+        # Return unique tags and their counts for the user
+        stmt = text("""
+            SELECT tag, count(*) as count
+            FROM bookmarks, unnest(tags) as tag
+            WHERE user_id = :user_id
+            GROUP BY tag
+            ORDER BY tag
+        """)
+        result = await session.execute(stmt, {"user_id": user_id})
+        return [{"tag": row[0], "count": row[1]} for row in result.all()]
+
+    async def update_bookmark(self, session: AsyncSession, user_id: str, bookmark_id: str, title: str = None, tags: List[str] = None):
+        stmt = select(Bookmark).where(Bookmark.id == bookmark_id, Bookmark.user_id == user_id)
+        result = await session.execute(stmt)
+        bookmark = result.scalar_one_or_none()
+        if not bookmark:
+            return None
+            
+        if title is not None:
+            bookmark.title = title
+        if tags is not None:
+            bookmark.tags = tags
+            
+        bookmark.updated_at = datetime.utcnow()
+        await session.commit()
+        await session.refresh(bookmark)
+        return bookmark
+
+    async def delete_bookmark(self, session: AsyncSession, user_id: str, bookmark_id: str):
+        stmt = select(Bookmark).where(Bookmark.id == bookmark_id, Bookmark.user_id == user_id)
+        result = await session.execute(stmt)
+        bookmark = result.scalar_one_or_none()
+        if not bookmark:
+            return False
+            
+        await session.delete(bookmark)
+        await session.commit()
+        return True
+
+    async def bulk_update_tags(self, session: AsyncSession, user_id: str, old_prefix: str, new_prefix: str):
+        stmt = select(Bookmark).where(Bookmark.user_id == user_id).where(text("EXISTS (SELECT 1 FROM unnest(tags) tag WHERE tag = :old_exact OR tag LIKE :old_prefix)")).params(old_exact=old_prefix, old_prefix=f"{old_prefix}/%")
+        result = await session.execute(stmt)
+        bookmarks = result.scalars().all()
+        
+        updated_count = 0
+        for bookmark in bookmarks:
+            new_tags = []
+            changed = False
+            for tag in bookmark.tags:
+                if tag == old_prefix:
+                    new_tags.append(new_prefix)
+                    changed = True
+                elif tag.startswith(old_prefix + "/"):
+                    new_tag = new_prefix + tag[len(old_prefix):]
+                    new_tags.append(new_tag)
+                    changed = True
+                else:
+                    new_tags.append(tag)
+                    
+            if changed:
+                bookmark.tags = new_tags
+                bookmark.updated_at = datetime.utcnow()
+                updated_count += 1
+                
+        await session.commit()
+        return updated_count
+
+    async def bulk_delete(self, session: AsyncSession, user_id: str, bookmark_ids: List[str]):
+        stmt = delete(Bookmark).where(Bookmark.user_id == user_id, Bookmark.id.in_(bookmark_ids))
+        result = await session.execute(stmt)
+        await session.commit()
+        return result.rowcount
+
+    async def bulk_add_tag(self, session: AsyncSession, user_id: str, bookmark_ids: List[str], tag: str):
+        stmt = select(Bookmark).where(Bookmark.user_id == user_id, Bookmark.id.in_(bookmark_ids))
+        result = await session.execute(stmt)
+        bookmarks = result.scalars().all()
+        
+        updated_count = 0
+        for bookmark in bookmarks:
+            if tag not in bookmark.tags:
+                new_tags = list(bookmark.tags)
+                new_tags.append(tag)
+                bookmark.tags = new_tags
+                bookmark.updated_at = datetime.utcnow()
+                updated_count += 1
+                
+        await session.commit()
+        return updated_count
+
+    async def bulk_remove_tag(self, session: AsyncSession, user_id: str, bookmark_ids: List[str], tag: str):
+        stmt = select(Bookmark).where(Bookmark.user_id == user_id, Bookmark.id.in_(bookmark_ids))
+        result = await session.execute(stmt)
+        bookmarks = result.scalars().all()
+        
+        updated_count = 0
+        for bookmark in bookmarks:
+            if tag in bookmark.tags:
+                new_tags = [t for t in bookmark.tags if t != tag]
+                bookmark.tags = new_tags
+                bookmark.updated_at = datetime.utcnow()
+                updated_count += 1
+                
+        await session.commit()
+        return updated_count
+
+management_service = ManagementService()

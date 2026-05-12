@@ -1,4 +1,5 @@
 from fastapi import FastAPI, HTTPException, Depends, Request
+from fastapi import FastAPI, HTTPException, Depends, Request
 from slowapi import Limiter, _rate_limit_exceeded_handler
 from slowapi.util import get_remote_address
 from slowapi.errors import RateLimitExceeded
@@ -7,6 +8,7 @@ from sqlmodel import select
 
 from pydantic import BaseModel
 from typing import List, Optional
+from datetime import datetime
 import uvicorn
 from contextlib import asynccontextmanager
 from sqlmodel.ext.asyncio.session import AsyncSession
@@ -14,8 +16,7 @@ from sqlmodel.ext.asyncio.session import AsyncSession
 from database import get_session, engine
 from models import Bookmark, AllowedUser
 
-from services import ingestion_service, search_service
-
+from services import ingestion_service, search_service, management_service
 # --- Pydantic Models ---
 
 class BookmarkIngestRequest(BaseModel):
@@ -30,6 +31,40 @@ class BookmarkResponse(BaseModel):
     title: Optional[str]
     tags: List[str] = []
     status: str = "processed"
+    created_at: Optional[datetime] = None
+    updated_at: Optional[datetime] = None
+    content_markdown: Optional[str] = None
+
+class BookmarkUpdateRequest(BaseModel):
+    title: Optional[str] = None
+    tags: Optional[List[str]] = None
+
+class BulkTagUpdateRequest(BaseModel):
+    old_prefix: str
+    new_prefix: str
+
+class BulkDeleteRequest(BaseModel):
+    bookmark_ids: List[str]
+
+class BulkAddRemoveTagRequest(BaseModel):
+    bookmark_ids: List[str]
+    tag: str
+
+class PaginatedBookmarksResponse(BaseModel):
+    items: List[BookmarkResponse]
+    total: int
+    skip: int
+    limit: int
+
+class TagCount(BaseModel):
+    tag: str
+    count: int
+
+class BulkUpdateResponse(BaseModel):
+    updated_count: int
+
+class BulkDeleteResponse(BaseModel):
+    deleted_count: int
 
 class SearchRequest(BaseModel):
     query: str
@@ -64,9 +99,11 @@ async def lifespan(app: FastAPI):
                 content_markdown TEXT,
                 tags TEXT[],
                 created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+                updated_at TIMESTAMP WITH TIME ZONE,
                 CONSTRAINT unique_user_url UNIQUE (user_id, url)
             )
         """))
+        await conn.execute(text("ALTER TABLE bookmarks ADD COLUMN IF NOT EXISTS updated_at TIMESTAMP WITH TIME ZONE"))
         await conn.execute(text(
             "CREATE INDEX IF NOT EXISTS idx_bookmarks_user_id ON bookmarks(user_id)"
         ))
@@ -210,7 +247,10 @@ async def ingest_bookmark(
             url=bookmark.url,
             title=bookmark.title,
             tags=bookmark.tags,
-            status="ingested"
+            status="ingested",
+            created_at=bookmark.created_at,
+            updated_at=bookmark.updated_at,
+            content_markdown=bookmark.content_markdown
         )
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
@@ -270,9 +310,153 @@ async def get_recent_bookmarks(
                 url=b.url,
                 title=b.title,
                 tags=b.tags,
-                status="saved"
+                status="saved",
+                created_at=b.created_at,
+                updated_at=b.updated_at
             ) for b in bookmarks
         ]
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/tags", response_model=List[TagCount])
+@limiter.limit("60/minute")
+async def get_tags(
+    request: Request,
+    session: AsyncSession = Depends(get_session),
+    user_id: str = Depends(get_current_user)
+):
+    try:
+        return await management_service.get_tags(session, user_id)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/bookmarks", response_model=PaginatedBookmarksResponse)
+@limiter.limit("60/minute")
+async def get_bookmarks(
+    request: Request,
+    skip: int = 0,
+    limit: int = 50,
+    tag_prefix: Optional[str] = None,
+    query: Optional[str] = None,
+    session: AsyncSession = Depends(get_session),
+    user_id: str = Depends(get_current_user)
+):
+    try:
+        bookmarks, total = await management_service.get_bookmarks(session, user_id, skip, limit, tag_prefix, query)
+        items = [
+            BookmarkResponse(
+                id=str(b.id),
+                url=b.url,
+                title=b.title,
+                tags=b.tags,
+                status="saved",
+                created_at=b.created_at,
+                updated_at=b.updated_at
+            ) for b in bookmarks
+        ]
+        return PaginatedBookmarksResponse(items=items, total=total, skip=skip, limit=limit)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.patch("/bookmarks/{bookmark_id}", response_model=BookmarkResponse)
+@limiter.limit("60/minute")
+async def update_bookmark(
+    request: Request,
+    bookmark_id: str,
+    payload: BookmarkUpdateRequest,
+    session: AsyncSession = Depends(get_session),
+    user_id: str = Depends(get_current_user)
+):
+    try:
+        bookmark = await management_service.update_bookmark(session, user_id, bookmark_id, payload.title, payload.tags)
+        if not bookmark:
+            raise HTTPException(status_code=404, detail="Bookmark not found")
+        return BookmarkResponse(
+            id=str(bookmark.id),
+            url=bookmark.url,
+            title=bookmark.title,
+            tags=bookmark.tags,
+            status="updated",
+            created_at=bookmark.created_at,
+            updated_at=bookmark.updated_at,
+            content_markdown=bookmark.content_markdown
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.delete("/bookmarks/{bookmark_id}")
+@limiter.limit("60/minute")
+async def delete_bookmark(
+    request: Request,
+    bookmark_id: str,
+    session: AsyncSession = Depends(get_session),
+    user_id: str = Depends(get_current_user)
+):
+    try:
+        success = await management_service.delete_bookmark(session, user_id, bookmark_id)
+        if not success:
+            raise HTTPException(status_code=404, detail="Bookmark not found")
+        return {"status": "deleted"}
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/bookmarks/bulk_update_tags", response_model=BulkUpdateResponse)
+@limiter.limit("60/minute")
+async def bulk_update_tags(
+    request: Request,
+    payload: BulkTagUpdateRequest,
+    session: AsyncSession = Depends(get_session),
+    user_id: str = Depends(get_current_user)
+):
+    try:
+        count = await management_service.bulk_update_tags(session, user_id, payload.old_prefix, payload.new_prefix)
+        return BulkUpdateResponse(updated_count=count)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/bookmarks/bulk_delete", response_model=BulkDeleteResponse)
+@limiter.limit("60/minute")
+async def bulk_delete_bookmarks(
+    request: Request,
+    payload: BulkDeleteRequest,
+    session: AsyncSession = Depends(get_session),
+    user_id: str = Depends(get_current_user)
+):
+    try:
+        count = await management_service.bulk_delete(session, user_id, payload.bookmark_ids)
+        return BulkDeleteResponse(deleted_count=count)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/bookmarks/bulk_add_tag", response_model=BulkUpdateResponse)
+@limiter.limit("60/minute")
+async def bulk_add_tag(
+    request: Request,
+    payload: BulkAddRemoveTagRequest,
+    session: AsyncSession = Depends(get_session),
+    user_id: str = Depends(get_current_user)
+):
+    try:
+        count = await management_service.bulk_add_tag(session, user_id, payload.bookmark_ids, payload.tag)
+        return BulkUpdateResponse(updated_count=count)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/bookmarks/bulk_remove_tag", response_model=BulkUpdateResponse)
+@limiter.limit("60/minute")
+async def bulk_remove_tag(
+    request: Request,
+    payload: BulkAddRemoveTagRequest,
+    session: AsyncSession = Depends(get_session),
+    user_id: str = Depends(get_current_user)
+):
+    try:
+        count = await management_service.bulk_remove_tag(session, user_id, payload.bookmark_ids, payload.tag)
+        return BulkUpdateResponse(updated_count=count)
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
