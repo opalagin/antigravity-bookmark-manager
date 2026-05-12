@@ -104,7 +104,7 @@ class SearchService:
     def __init__(self, embedding_service: EmbeddingService):
         self.embedding_service = embedding_service
 
-    async def search(self, session: AsyncSession, user_id: str, query: str, limit: int = 5, threshold: float = 0.7):
+    async def search(self, session: AsyncSession, user_id: str, query: str, limit: int = 5, threshold: float = 0.5):
         # 1. Embed Query
         query_vector = await self.embedding_service.embed_query(query)
         
