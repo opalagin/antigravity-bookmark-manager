@@ -117,6 +117,20 @@ const api = {
             method: 'POST',
             body: JSON.stringify({ bookmark_ids: ids })
         });
+    },
+
+    async bulkAddTag(ids, tag) {
+        return this._fetch('/bookmarks/bulk_add_tag', {
+            method: 'POST',
+            body: JSON.stringify({ bookmark_ids: ids, tag: tag })
+        });
+    },
+
+    async bulkRemoveTag(ids, tag) {
+        return this._fetch('/bookmarks/bulk_remove_tag', {
+            method: 'POST',
+            body: JSON.stringify({ bookmark_ids: ids, tag: tag })
+        });
     }
 };
 

@@ -41,6 +41,8 @@
             
             <div class="toolbar" id="bulk-toolbar" style="display: none;">
                 <span class="selected-count" id="selected-count-label">1 selected</span>
+                <button id="bulk-add-tag-btn" class="secondary-btn"><span class="icon">🏷️+</span> Add Tag</button>
+                <button id="bulk-remove-tag-btn" class="secondary-btn"><span class="icon">🏷️-</span> Remove Tag</button>
                 <button id="bulk-delete-btn" class="danger-btn"><span class="icon">🗑️</span> Delete</button>
             </div>
 
@@ -89,6 +91,12 @@
                         <label for="edit-tags">Tags (comma separated)</label>
                         <input type="text" id="edit-tags">
                     </div>
+                    <div class="form-group markdown-preview">
+                        <label>Content Preview</label>
+                        <div id="content-preview-box" style="padding: 10px; border: 1px solid #e2e8f0; border-radius: 6px; background: #fff; max-height: 200px; overflow-y: auto; font-size: 0.85rem; color: #4a5568; white-space: pre-wrap;">
+                            No content available.
+                        </div>
+                    </div>
                     <div class="actions">
                         <button type="button" id="save-edit-btn" class="primary-btn">Save Changes</button>
                         <button type="button" id="delete-single-btn" class="danger-btn">Delete</button>
@@ -107,6 +115,19 @@
             <div class="modal-actions">
                 <button id="cancel-rename-btn" class="secondary-btn">Cancel</button>
                 <button id="confirm-rename-btn" class="primary-btn">Rename</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Delete Tag Modal -->
+    <div id="delete-tag-modal" class="modal">
+        <div class="modal-content">
+            <h3>Delete Tag</h3>
+            <p>What would you like to do with the tag <strong id="delete-tag-display"></strong>?</p>
+            <div class="modal-actions" style="flex-direction: column; gap: 10px; margin-top: 20px;">
+                <button id="remove-tag-only-btn" class="secondary-btn">Remove Tag from Bookmarks</button>
+                <button id="delete-bookmarks-with-tag-btn" class="danger-btn">Delete Bookmarks</button>
+                <button id="cancel-delete-tag-btn" class="secondary-btn" style="background: #edf2f7;">Cancel</button>
             </div>
         </div>
     </div>

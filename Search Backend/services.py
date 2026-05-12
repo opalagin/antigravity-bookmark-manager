@@ -10,6 +10,7 @@ import asyncio
 import os
 from openai import AsyncOpenAI
 import httpx
+from datetime import datetime
 
 # --- Embedding Service ---
 class EmbeddingService:
@@ -255,8 +256,11 @@ class ManagementService:
         stmt = select(Bookmark).where(Bookmark.user_id == user_id)
         
         if tag_prefix:
-            # Match exact tag or nested tags under this prefix
-            stmt = stmt.where(text("EXISTS (SELECT 1 FROM unnest(tags) tag WHERE tag = :tag_exact OR tag LIKE :tag_prefix)")).params(tag_exact=tag_prefix, tag_prefix=f"{tag_prefix}/%")
+            if tag_prefix == "untagged":
+                stmt = stmt.where((Bookmark.tags == '{}') | (Bookmark.tags == None))
+            else:
+                # Match exact tag or nested tags under this prefix
+                stmt = stmt.where(text("EXISTS (SELECT 1 FROM unnest(tags) tag WHERE tag = :tag_exact OR tag LIKE :tag_prefix)")).params(tag_exact=tag_prefix, tag_prefix=f"{tag_prefix}/%")
             
         if query:
             stmt = stmt.where(Bookmark.title.ilike(f"%{query}%") | Bookmark.url.ilike(f"%{query}%"))
@@ -297,6 +301,7 @@ class ManagementService:
         if tags is not None:
             bookmark.tags = tags
             
+        bookmark.updated_at = datetime.utcnow()
         await session.commit()
         await session.refresh(bookmark)
         return bookmark
@@ -334,6 +339,7 @@ class ManagementService:
                     
             if changed:
                 bookmark.tags = new_tags
+                bookmark.updated_at = datetime.utcnow()
                 updated_count += 1
                 
         await session.commit()
@@ -344,5 +350,38 @@ class ManagementService:
         result = await session.execute(stmt)
         await session.commit()
         return result.rowcount
+
+    async def bulk_add_tag(self, session: AsyncSession, user_id: str, bookmark_ids: List[str], tag: str):
+        stmt = select(Bookmark).where(Bookmark.user_id == user_id, Bookmark.id.in_(bookmark_ids))
+        result = await session.execute(stmt)
+        bookmarks = result.scalars().all()
+        
+        updated_count = 0
+        for bookmark in bookmarks:
+            if tag not in bookmark.tags:
+                new_tags = list(bookmark.tags)
+                new_tags.append(tag)
+                bookmark.tags = new_tags
+                bookmark.updated_at = datetime.utcnow()
+                updated_count += 1
+                
+        await session.commit()
+        return updated_count
+
+    async def bulk_remove_tag(self, session: AsyncSession, user_id: str, bookmark_ids: List[str], tag: str):
+        stmt = select(Bookmark).where(Bookmark.user_id == user_id, Bookmark.id.in_(bookmark_ids))
+        result = await session.execute(stmt)
+        bookmarks = result.scalars().all()
+        
+        updated_count = 0
+        for bookmark in bookmarks:
+            if tag in bookmark.tags:
+                new_tags = [t for t in bookmark.tags if t != tag]
+                bookmark.tags = new_tags
+                bookmark.updated_at = datetime.utcnow()
+                updated_count += 1
+                
+        await session.commit()
+        return updated_count
 
 management_service = ManagementService()

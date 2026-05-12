@@ -36,7 +36,17 @@ document.addEventListener('DOMContentLoaded', () => {
     const selectAllCheckbox = document.getElementById('select-all-checkbox');
     const bulkToolbar = document.getElementById('bulk-toolbar');
     const selectedCountLabel = document.getElementById('selected-count-label');
+    const bulkAddTagBtn = document.getElementById('bulk-add-tag-btn');
+    const bulkRemoveTagBtn = document.getElementById('bulk-remove-tag-btn');
     const bulkDeleteBtn = document.getElementById('bulk-delete-btn');
+
+    // Modals
+    const deleteTagModal = document.getElementById('delete-tag-modal');
+    const deleteTagDisplay = document.getElementById('delete-tag-display');
+    const removeTagOnlyBtn = document.getElementById('remove-tag-only-btn');
+    const deleteBookmarksWithTagBtn = document.getElementById('delete-bookmarks-with-tag-btn');
+    const cancelDeleteTagBtn = document.getElementById('cancel-delete-tag-btn');
+    let currentDeleteTag = null;
 
     // Modals
     const renameTagModal = document.getElementById('rename-tag-modal');
@@ -45,6 +55,8 @@ document.addEventListener('DOMContentLoaded', () => {
     const cancelRenameBtn = document.getElementById('cancel-rename-btn');
     const confirmRenameBtn = document.getElementById('confirm-rename-btn');
     let currentRenamePrefix = null;
+    
+    const contentPreviewBox = document.getElementById('content-preview-box');
 
     // Helper
     function escapeHTML(str) {
@@ -113,6 +125,10 @@ document.addEventListener('DOMContentLoaded', () => {
         const allNode = createTreeNode('All Bookmarks', null, !state.tagPrefix);
         tagTree.appendChild(allNode);
 
+        // "Untagged" node
+        const untaggedNode = createTreeNode('Untagged', 'untagged', state.tagPrefix === 'untagged');
+        tagTree.appendChild(untaggedNode);
+
         // Build hierarchy
         const tree = {};
         state.tags.forEach(({ tag, count }) => {
@@ -171,10 +187,11 @@ document.addEventListener('DOMContentLoaded', () => {
             html += `<span class="count">${count}</span>`;
         }
         
-        if (path !== null) {
+        if (path !== null && path !== 'untagged') {
             html += `
                 <div class="actions">
                     <button class="icon-btn rename-tag-btn" title="Rename" data-path="${escapeHTML(path)}">✏️</button>
+                    <button class="icon-btn delete-tag-btn" title="Delete" data-path="${escapeHTML(path)}" style="color: #e53e3e;">🗑️</button>
                 </div>
             `;
         }
@@ -187,6 +204,11 @@ document.addEventListener('DOMContentLoaded', () => {
                 openRenameModal(path);
                 return;
             }
+            if (e.target.closest('.delete-tag-btn')) {
+                e.stopPropagation();
+                openDeleteTagModal(path);
+                return;
+            }
             
             state.tagPrefix = path;
             state.skip = 0; // Reset pagination
@@ -194,6 +216,33 @@ document.addEventListener('DOMContentLoaded', () => {
             loadBookmarks();
             renderTagTree(); // Update active state
         });
+        
+        // Drag and drop support
+        if (path !== null && path !== 'untagged') {
+            div.addEventListener('dragover', (e) => {
+                e.preventDefault();
+                div.style.backgroundColor = '#edf2f7';
+            });
+            div.addEventListener('dragleave', (e) => {
+                div.style.backgroundColor = '';
+            });
+            div.addEventListener('drop', async (e) => {
+                e.preventDefault();
+                div.style.backgroundColor = '';
+                
+                const bookmarkId = e.dataTransfer.getData('text/plain');
+                if (bookmarkId) {
+                    const idsToMove = state.selectedBookmarkIds.has(bookmarkId) ? Array.from(state.selectedBookmarkIds) : [bookmarkId];
+                    try {
+                        await window.api.bulkAddTag(idsToMove, path);
+                        await loadTags();
+                        await loadBookmarks();
+                    } catch (err) {
+                        alert("Failed to add tag: " + err.message);
+                    }
+                }
+            });
+        }
         
         return div;
     }
@@ -207,6 +256,10 @@ document.addEventListener('DOMContentLoaded', () => {
 
         state.bookmarks.forEach(bookmark => {
             const tr = document.createElement('tr');
+            tr.setAttribute('draggable', 'true');
+            tr.addEventListener('dragstart', (e) => {
+                e.dataTransfer.setData('text/plain', bookmark.id);
+            });
             if (state.selectedBookmarkIds.has(bookmark.id)) tr.classList.add('selected');
             
             const dateStr = new Date(bookmark.created_at || Date.now()).toLocaleDateString();
@@ -273,6 +326,7 @@ document.addEventListener('DOMContentLoaded', () => {
         editUrl.value = bookmark.url;
         editUrlLink.href = bookmark.url;
         editTags.value = bookmark.tags.join(', ');
+        contentPreviewBox.textContent = bookmark.content_markdown || 'No content available.';
     }
 
     function updateBulkToolbar() {
@@ -401,6 +455,34 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     });
 
+    bulkAddTagBtn.addEventListener('click', async () => {
+        if (state.selectedBookmarkIds.size === 0) return;
+        const tag = prompt("Enter tag to add to selected bookmarks:");
+        if (!tag) return;
+        
+        try {
+            await window.api.bulkAddTag(Array.from(state.selectedBookmarkIds), tag);
+            await loadTags();
+            await loadBookmarks();
+        } catch (err) {
+            alert("Failed to add tag: " + err.message);
+        }
+    });
+
+    bulkRemoveTagBtn.addEventListener('click', async () => {
+        if (state.selectedBookmarkIds.size === 0) return;
+        const tag = prompt("Enter tag to remove from selected bookmarks:");
+        if (!tag) return;
+        
+        try {
+            await window.api.bulkRemoveTag(Array.from(state.selectedBookmarkIds), tag);
+            await loadTags();
+            await loadBookmarks();
+        } catch (err) {
+            alert("Failed to remove tag: " + err.message);
+        }
+    });
+
     // Rename Tag Modal
     function openRenameModal(oldPrefix) {
         currentRenamePrefix = oldPrefix;
@@ -442,6 +524,60 @@ document.addEventListener('DOMContentLoaded', () => {
         } finally {
             confirmRenameBtn.textContent = originalText;
             confirmRenameBtn.disabled = false;
+        }
+    });
+
+    // Delete Tag Modal
+    function openDeleteTagModal(tag) {
+        currentDeleteTag = tag;
+        deleteTagDisplay.textContent = tag;
+        deleteTagModal.classList.add('active');
+    }
+
+    cancelDeleteTagBtn.addEventListener('click', () => {
+        deleteTagModal.classList.remove('active');
+        currentDeleteTag = null;
+    });
+
+    removeTagOnlyBtn.addEventListener('click', async () => {
+        if (!currentDeleteTag) return;
+        removeTagOnlyBtn.disabled = true;
+        try {
+            const res = await window.api.getAllBookmarks(0, 1000, currentDeleteTag);
+            if (res.items && res.items.length > 0) {
+                const ids = res.items.map(b => b.id);
+                await window.api.bulkRemoveTag(ids, currentDeleteTag);
+            }
+            deleteTagModal.classList.remove('active');
+            
+            if (state.tagPrefix === currentDeleteTag) state.tagPrefix = null;
+            await loadTags();
+            await loadBookmarks();
+        } catch (err) {
+            alert("Failed: " + err.message);
+        } finally {
+            removeTagOnlyBtn.disabled = false;
+        }
+    });
+
+    deleteBookmarksWithTagBtn.addEventListener('click', async () => {
+        if (!currentDeleteTag) return;
+        deleteBookmarksWithTagBtn.disabled = true;
+        try {
+            const res = await window.api.getAllBookmarks(0, 1000, currentDeleteTag);
+            if (res.items && res.items.length > 0) {
+                const ids = res.items.map(b => b.id);
+                await window.api.bulkDelete(ids);
+            }
+            deleteTagModal.classList.remove('active');
+            
+            if (state.tagPrefix === currentDeleteTag) state.tagPrefix = null;
+            await loadTags();
+            await loadBookmarks();
+        } catch (err) {
+            alert("Failed: " + err.message);
+        } finally {
+            deleteBookmarksWithTagBtn.disabled = false;
         }
     });
 

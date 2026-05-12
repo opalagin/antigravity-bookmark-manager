@@ -19,6 +19,9 @@ class Bookmark(SQLModel, table=True):
     created_at: Optional[datetime] = Field(
         sa_column=Column(TIMESTAMP(timezone=True), server_default=func.now())
     )
+    updated_at: Optional[datetime] = Field(
+        sa_column=Column(TIMESTAMP(timezone=True), onupdate=func.now())
+    )
     
     # Relationship
     embeddings: List["BookmarkEmbedding"] = Relationship(back_populates="bookmark")
