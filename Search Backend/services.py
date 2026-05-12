@@ -35,8 +35,9 @@ class EmbeddingService:
         return await asyncio.to_thread(self._embed_sync, texts)
     
     async def embed_query(self, text: str) -> List[float]:
-        embeddings = await self.embed_documents([text])
-        return embeddings[0]
+        def _query_embed_sync():
+            return list(self.model.query_embed(text))[0].tolist()
+        return await asyncio.to_thread(_query_embed_sync)
 
 # Singleton instance
 embedding_service = EmbeddingService()
@@ -104,7 +105,7 @@ class SearchService:
     def __init__(self, embedding_service: EmbeddingService):
         self.embedding_service = embedding_service
 
-    async def search(self, session: AsyncSession, user_id: str, query: str, limit: int = 5, threshold: float = 0.5):
+    async def search(self, session: AsyncSession, user_id: str, query: str, limit: int = 5, threshold: float = 0.4):
         # 1. Embed Query
         query_vector = await self.embedding_service.embed_query(query)
         
@@ -133,7 +134,7 @@ class SearchService:
         for embedding, bookmark, distance in all_matches:
             # Skip if distance is too high (low similarity)
             # Cosine distance: 0 = identical, 1 = orthogonal, 2 = opposite
-            # Threshold 0.7 means we accept similarity > 0.3 approx.
+            # Threshold 0.4 filters out unrelated BGE embeddings (which hover around 0.45-0.5)
             if distance > threshold:
                 continue
 
