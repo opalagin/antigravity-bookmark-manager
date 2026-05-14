@@ -2,8 +2,7 @@ from typing import List
 from sqlmodel import select, delete
 from sqlalchemy import func, text
 from sqlmodel.ext.asyncio.session import AsyncSession
-from langchain_text_splitters import RecursiveCharacterTextSplitter
-from sentence_transformers import SentenceTransformer
+from fastembed import TextEmbedding
 from models import Bookmark, BookmarkEmbedding
 from database import get_session
 import asyncio
@@ -12,27 +11,33 @@ from openai import AsyncOpenAI
 import httpx
 from datetime import datetime
 
+def split_text(text: str, chunk_size: int = 1000, overlap: int = 200) -> list[str]:
+    if len(text) <= chunk_size:
+        return [text]
+    chunks, start = [], 0
+    while start < len(text):
+        end = min(start + chunk_size, len(text))
+        chunks.append(text[start:end])
+        start += chunk_size - overlap
+    return chunks
+
 # --- Embedding Service ---
 class EmbeddingService:
-    def __init__(self, model_name: str = "all-MiniLM-L6-v2"):
-        # Load model slightly lazily or globally. 
-        # For simplicity in this demo, initializing here. 
-        # In prod, consider a singleton or valid dependency injection.
-        self.model = SentenceTransformer(model_name)
+    def __init__(self):
+        self.model = TextEmbedding("BAAI/bge-small-en-v1.5")
 
     def _embed_sync(self, texts: List[str]) -> List[List[float]]:
-        # SentenceTransformer is blocking / CPU bound
-        # Cast to list[float] explicitly
-        embeddings = self.model.encode(texts, convert_to_tensor=False)
-        return embeddings.tolist()
+        # fastembed yields generators, so convert to list explicitly
+        return [embedding.tolist() for embedding in self.model.embed(texts)]
 
     async def embed_documents(self, texts: List[str]) -> List[List[float]]:
         # Offload blocking work to threadpool
         return await asyncio.to_thread(self._embed_sync, texts)
     
     async def embed_query(self, text: str) -> List[float]:
-        embeddings = await self.embed_documents([text])
-        return embeddings[0]
+        def _query_embed_sync():
+            return next(self.model.query_embed(text)).tolist()
+        return await asyncio.to_thread(_query_embed_sync)
 
 # Singleton instance
 embedding_service = EmbeddingService()
@@ -42,10 +47,6 @@ embedding_service = EmbeddingService()
 class IngestionService:
     def __init__(self, embedding_service: EmbeddingService):
         self.embedding_service = embedding_service
-        self.text_splitter = RecursiveCharacterTextSplitter(
-            chunk_size=1000,
-            chunk_overlap=200
-        )
 
     async def process_bookmark(self, session: AsyncSession, user_id: str, url: str, title: str, content: str, tags: List[str] = []) -> Bookmark:
         # 1. Check if exists for this user
@@ -74,7 +75,7 @@ class IngestionService:
             return bookmark
 
         # 2. Chunk Content
-        chunks = self.text_splitter.split_text(content)
+        chunks = split_text(content)
         
         if not chunks:
             return bookmark
@@ -104,7 +105,7 @@ class SearchService:
     def __init__(self, embedding_service: EmbeddingService):
         self.embedding_service = embedding_service
 
-    async def search(self, session: AsyncSession, user_id: str, query: str, limit: int = 5, threshold: float = 0.7):
+    async def search(self, session: AsyncSession, user_id: str, query: str, limit: int = 5, threshold: float = 0.4):
         # 1. Embed Query
         query_vector = await self.embedding_service.embed_query(query)
         
@@ -133,7 +134,7 @@ class SearchService:
         for embedding, bookmark, distance in all_matches:
             # Skip if distance is too high (low similarity)
             # Cosine distance: 0 = identical, 1 = orthogonal, 2 = opposite
-            # Threshold 0.7 means we accept similarity > 0.3 approx.
+            # Threshold 0.4 filters out unrelated BGE embeddings (which hover around 0.45-0.5)
             if distance > threshold:
                 continue
 
