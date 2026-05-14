@@ -1,9 +1,0 @@
-fastapi==0.115.8
-uvicorn==0.34.0
-sqlmodel==0.0.22
-asyncpg==0.30.0
-pgvector==0.3.6
-openai==1.63.2
-httpx==0.28.1
-slowapi==0.1.9
-fastembed==0.4.2

@@ -1,6 +1,7 @@
-# Check for Python
-if (-not (Get-Command python -ErrorAction SilentlyContinue)) {
-    Write-Host "Error: Python is not found. Please install Python 3.10+." -ForegroundColor Red
+# Check for uv
+if (-not (Get-Command uv -ErrorAction SilentlyContinue)) {
+    Write-Host "Error: uv is not found. Please install uv (https://github.com/astral-sh/uv)." -ForegroundColor Red
+    Write-Host "Install command: powershell -ExecutionPolicy ByPass -c `"irm https://astral.sh/uv/install.ps1 | iex`"" -ForegroundColor Cyan
     exit 1
 }
 
@@ -26,20 +27,15 @@ else {
     Write-Host "Warning: .env file not found." -ForegroundColor Yellow
 }
 
-# Create venv if it doesn't exist
+# Ensure venv exists and dependencies are synced
 if (-not (Test-Path .venv)) {
-    Write-Host "Creating virtual environment..." -ForegroundColor Cyan
-    python -m venv .venv
+    Write-Host "Creating virtual environment with uv..." -ForegroundColor Cyan
+    uv venv --python 3.10 --quiet
 }
 
-# Activate venv
-Write-Host "Activating virtual environment..." -ForegroundColor Cyan
-.\.venv\Scripts\Activate.ps1
-
-# Install dependencies
-Write-Host "Installing dependencies..." -ForegroundColor Cyan
-pip install -r requirements.txt
+Write-Host "Syncing dependencies with uv..." -ForegroundColor Cyan
+uv pip install -r requirements.txt
 
 # Start Server
-Write-Host "Starting Search Backend..." -ForegroundColor Green
-uvicorn main:app --host 0.0.0.0 --port 8000 --reload
+Write-Host "Starting Search Backend with uv..." -ForegroundColor Green
+uv run uvicorn main:app --host 0.0.0.0 --port 8000 --reload
