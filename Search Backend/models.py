@@ -24,7 +24,10 @@ class Bookmark(SQLModel, table=True):
     )
     
     # Relationship
-    embeddings: List["BookmarkEmbedding"] = Relationship(back_populates="bookmark")
+    embeddings: List["BookmarkEmbedding"] = Relationship(
+        back_populates="bookmark",
+        sa_relationship_kwargs={"cascade": "all, delete-orphan"}
+    )
 
 class BookmarkEmbedding(SQLModel, table=True):
     __tablename__ = "bookmark_embeddings"

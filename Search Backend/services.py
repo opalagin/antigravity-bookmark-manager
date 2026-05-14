@@ -347,6 +347,10 @@ class ManagementService:
         return updated_count
 
     async def bulk_delete(self, session: AsyncSession, user_id: str, bookmark_ids: List[str]):
+        # Delete embeddings first to avoid foreign key violations during bulk delete
+        emb_stmt = delete(BookmarkEmbedding).where(BookmarkEmbedding.bookmark_id.in_(bookmark_ids))
+        await session.execute(emb_stmt)
+        
         stmt = delete(Bookmark).where(Bookmark.user_id == user_id, Bookmark.id.in_(bookmark_ids))
         result = await session.execute(stmt)
         await session.commit()
