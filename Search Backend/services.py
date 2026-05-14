@@ -36,7 +36,7 @@ class EmbeddingService:
     
     async def embed_query(self, text: str) -> List[float]:
         def _query_embed_sync():
-            return list(self.model.query_embed(text))[0].tolist()
+            return next(self.model.query_embed(text)).tolist()
         return await asyncio.to_thread(_query_embed_sync)
 
 # Singleton instance
