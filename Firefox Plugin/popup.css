@@ -124,3 +124,59 @@ header h1 {
     background: none !important;
     box-shadow: none !important;
 }
+
+/* Settings Dropdown */
+.settings-container {
+    position: absolute;
+    left: 0;
+}
+
+.icon-btn {
+    background: none;
+    border: none;
+    font-size: 1.2rem;
+    cursor: pointer;
+    padding: 4px;
+    border-radius: 50%;
+    transition: background-color 0.2s;
+    color: var(--text-color);
+}
+
+.icon-btn:hover {
+    background-color: rgba(128, 128, 128, 0.2);
+}
+
+.dropdown-menu {
+    position: absolute;
+    left: 0;
+    top: 100%;
+    background-color: var(--card-bg);
+    border: 1px solid rgba(128, 128, 128, 0.2);
+    border-radius: 8px;
+    box-shadow: var(--shadow);
+    padding: 8px 0;
+    min-width: max-content;
+    white-space: nowrap;
+    z-index: 100;
+}
+
+.dropdown-menu.hidden {
+    display: none;
+}
+
+.dropdown-item {
+    display: block;
+    width: 100%;
+    text-align: left;
+    padding: 10px 16px;
+    background: none;
+    border: none;
+    color: var(--text-color);
+    font-size: 0.9rem;
+    cursor: pointer;
+    transition: background-color 0.2s;
+}
+
+.dropdown-item:hover {
+    background-color: rgba(128, 128, 128, 0.2);
+}

@@ -10,17 +10,23 @@
 
 <body>
     <div class="container">
-        <header>
-            <h1>Smart Bookmarks</h1>
+        <header style="position: relative; display: flex; justify-content: center; align-items: center; padding: 4px 0;">
+            <div class="settings-container">
+                <button id="settings-btn" class="icon-btn" title="Settings">⚙️</button>
+                <div id="settings-dropdown" class="dropdown-menu hidden">
+                    <button id="reembed-btn" class="dropdown-item">Reembed your bookmarks...</button>
+                </div>
+            </div>
+            <h1 style="margin: 0; font-size: 1.2rem; color: var(--primary-color);">Smart Bookmarks</h1>
+            <div id="logout-container" style="position: absolute; right: 0;"></div>
         </header>
 
         <main>
             <button id="save-btn" class="primary-btn">
                 <span class="icon">🔖</span> Save Current Page
             </button>
-            <input type="text" id="tags-input" placeholder="Tags (comma separated)..." style="width: 100%; box-sizing: border-box; margin-top: 8px; padding: 6px;">
 
-            <div class="search-container">
+            <div class="search-container" style="margin-top: 12px;">
                 <input type="text" id="search-input" placeholder="Ask your bookmarks...">
             </div>
 

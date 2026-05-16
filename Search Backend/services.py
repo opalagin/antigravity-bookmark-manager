@@ -253,6 +253,9 @@ search_service = SearchService(embedding_service)
 
 # --- Management Service ---
 class ManagementService:
+    def __init__(self):
+        self.reembed_jobs: dict[str, dict] = {}
+
     async def get_bookmarks(self, session: AsyncSession, user_id: str, skip: int = 0, limit: int = 50, tag_prefix: str = None, query: str = None):
         stmt = select(Bookmark).where(Bookmark.user_id == user_id)
         
@@ -389,4 +392,66 @@ class ManagementService:
         await session.commit()
         return updated_count
 
+    async def reembed_user_bookmarks(self, user_id: str):
+        self.reembed_jobs[user_id] = {"status": "starting", "total": 0, "processed": 0, "error": None}
+        
+        try:
+            async for session in get_session():
+                stmt = select(Bookmark).where(Bookmark.user_id == user_id)
+                result = await session.execute(stmt)
+                bookmarks = result.scalars().all()
+                
+                total = len(bookmarks)
+                self.reembed_jobs[user_id]["total"] = total
+                self.reembed_jobs[user_id]["status"] = "running"
+                
+                if total == 0:
+                    self.reembed_jobs[user_id]["status"] = "completed"
+                    break
+                
+                # Delete existing embeddings for this user's bookmarks
+                bookmark_ids = [b.id for b in bookmarks]
+                if bookmark_ids:
+                    # chunk deletion if many? Assuming list is small enough for IN clause.
+                    del_stmt = delete(BookmarkEmbedding).where(BookmarkEmbedding.bookmark_id.in_(bookmark_ids))
+                    await session.execute(del_stmt)
+                    await session.commit()
+                
+                processed = 0
+                for b in bookmarks:
+                    if not b.content_markdown:
+                        processed += 1
+                        self.reembed_jobs[user_id]["processed"] = processed
+                        continue
+                    
+                    chunks = split_text(b.content_markdown)
+                    if not chunks:
+                        processed += 1
+                        self.reembed_jobs[user_id]["processed"] = processed
+                        continue
+                        
+                    embeddings = await ingestion_service.embedding_service.embed_documents(chunks)
+                    for i, (text, vector) in enumerate(zip(chunks, embeddings)):
+                        emb_entry = BookmarkEmbedding(
+                            bookmark_id=b.id,
+                            chunk_index=i,
+                            chunk_text=text,
+                            embedding=vector
+                        )
+                        session.add(emb_entry)
+                    
+                    # Commit per bookmark to save memory and ensure partial progress is saved
+                    await session.commit()
+                    processed += 1
+                    self.reembed_jobs[user_id]["processed"] = processed
+                    
+                self.reembed_jobs[user_id]["status"] = "completed"
+                break # Only need one session from the generator
+        except Exception as e:
+            import traceback
+            traceback.print_exc()
+            self.reembed_jobs[user_id]["status"] = "failed"
+            self.reembed_jobs[user_id]["error"] = str(e)
+
 management_service = ManagementService()
+

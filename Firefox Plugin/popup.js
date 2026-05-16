@@ -45,10 +45,6 @@ document.addEventListener('DOMContentLoaded', () => {
             const extractedData = executionResults[0].result;
             console.log("Extracted:", extractedData);
 
-            // 3.5 Get Tags
-            const tagsInput = document.getElementById('tags-input');
-            const tags = tagsInput.value.split(',').map(t => t.trim()).filter(t => t);
-
             // 4. Send to Backend
             if (!window.api) throw new Error("API client not loaded");
 
@@ -56,7 +52,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 extractedData.url,
                 extractedData.title,
                 extractedData.content,
-                tags
+                [] // Removed tags
             );
 
             // Success feedback
@@ -113,6 +109,76 @@ document.addEventListener('DOMContentLoaded', () => {
     if (manageBtn) {
         manageBtn.addEventListener('click', () => {
             browser.tabs.create({ url: browser.runtime.getURL("manager.html") });
+        });
+    }
+
+    // 1.6 Handle Settings Dropdown and Reembed
+    const settingsBtn = document.getElementById('settings-btn');
+    const settingsDropdown = document.getElementById('settings-dropdown');
+    const reembedBtn = document.getElementById('reembed-btn');
+
+    if (settingsBtn && settingsDropdown) {
+        settingsBtn.addEventListener('click', (e) => {
+            e.stopPropagation(); // Prevent document click from immediately closing it
+            settingsDropdown.classList.toggle('hidden');
+        });
+
+        // Close dropdown when clicking outside
+        document.addEventListener('click', (e) => {
+            if (!settingsDropdown.contains(e.target) && e.target !== settingsBtn) {
+                settingsDropdown.classList.add('hidden');
+            }
+        });
+    }
+
+    if (reembedBtn) {
+        reembedBtn.addEventListener('click', async () => {
+            if (!window.api) return;
+            try {
+                reembedBtn.disabled = true;
+                reembedBtn.textContent = 'Starting re-embed...';
+                
+                await window.api.startReembed();
+                
+                // Start polling
+                const pollInterval = setInterval(async () => {
+                    try {
+                        const status = await window.api.getReembedStatus();
+                        if (!status || status.status === "none" || status.status === "starting") {
+                            reembedBtn.textContent = 'Starting...';
+                        } else if (status.status === "running") {
+                            const percent = status.total > 0 ? Math.round((status.processed / status.total) * 100) : 0;
+                            reembedBtn.textContent = `Re-embedding... (${percent}%)`;
+                        } else if (status.status === "completed") {
+                            clearInterval(pollInterval);
+                            reembedBtn.textContent = 'Completed!';
+                            setTimeout(() => {
+                                reembedBtn.disabled = false;
+                                reembedBtn.textContent = 'Reembed your bookmarks...';
+                                settingsDropdown.classList.add('hidden');
+                            }, 2000);
+                        } else if (status.status === "failed") {
+                            clearInterval(pollInterval);
+                            reembedBtn.textContent = 'Failed!';
+                            console.error("Re-embed failed:", status.error);
+                            setTimeout(() => {
+                                reembedBtn.disabled = false;
+                                reembedBtn.textContent = 'Reembed your bookmarks...';
+                            }, 3000);
+                        }
+                    } catch (pollErr) {
+                        console.error("Polling error:", pollErr);
+                    }
+                }, 1500);
+
+            } catch (err) {
+                console.error("Failed to start re-embed:", err);
+                reembedBtn.textContent = 'Error starting';
+                setTimeout(() => {
+                    reembedBtn.disabled = false;
+                    reembedBtn.textContent = 'Reembed your bookmarks...';
+                }, 2000);
+            }
         });
     }
 
@@ -216,16 +282,14 @@ document.addEventListener('DOMContentLoaded', () => {
         // Check if button already exists
         if (document.getElementById('logout-btn')) return;
 
-        const header = document.querySelector('header');
+        const container = document.getElementById('logout-container');
+        if (!container) return;
+        
         const logoutBtn = document.createElement('button');
         logoutBtn.id = 'logout-btn';
-        logoutBtn.textContent = 'Logout';
-        logoutBtn.className = 'secondary-btn'; // Assuming this class exists or will default to simple style
-        logoutBtn.style.position = 'absolute';
-        logoutBtn.style.right = '15px';
-        logoutBtn.style.top = '15px';
-        logoutBtn.style.fontSize = '0.8rem';
-        logoutBtn.style.padding = '4px 8px';
+        logoutBtn.title = 'Logout';
+        logoutBtn.innerHTML = '🚪';
+        logoutBtn.className = 'icon-btn'; 
 
         logoutBtn.addEventListener('click', async () => {
             await browser.storage.local.remove('authToken');
@@ -234,7 +298,7 @@ document.addEventListener('DOMContentLoaded', () => {
             showLogin();
         });
 
-        header.appendChild(logoutBtn);
+        container.appendChild(logoutBtn);
     }
 
     function showLogin() {
