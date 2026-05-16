@@ -131,6 +131,18 @@ const api = {
             method: 'POST',
             body: JSON.stringify({ bookmark_ids: ids, tag: tag })
         });
+    },
+
+    async startReembed() {
+        return this._fetch('/bookmarks/reembed', {
+            method: 'POST'
+        });
+    },
+
+    async getReembedStatus() {
+        return this._fetch('/bookmarks/reembed/status', {
+            method: 'GET'
+        });
     }
 };
 

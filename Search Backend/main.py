@@ -1,5 +1,4 @@
-from fastapi import FastAPI, HTTPException, Depends, Request
-from fastapi import FastAPI, HTTPException, Depends, Request
+from fastapi import FastAPI, HTTPException, Depends, Request, BackgroundTasks
 from slowapi import Limiter, _rate_limit_exceeded_handler
 from slowapi.util import get_remote_address
 from slowapi.errors import RateLimitExceeded
@@ -459,6 +458,27 @@ async def bulk_remove_tag(
         return BulkUpdateResponse(updated_count=count)
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/bookmarks/reembed")
+@limiter.limit("5/minute")
+async def start_reembed(
+    request: Request,
+    background_tasks: BackgroundTasks,
+    user_id: str = Depends(get_current_user)
+):
+    background_tasks.add_task(management_service.reembed_user_bookmarks, user_id)
+    return {"status": "started"}
+
+@app.get("/bookmarks/reembed/status")
+@limiter.limit("60/minute")
+async def get_reembed_status(
+    request: Request,
+    user_id: str = Depends(get_current_user)
+):
+    status = management_service.reembed_jobs.get(user_id)
+    if not status:
+        return {"status": "none"}
+    return status
 
 if __name__ == "__main__":
     uvicorn.run("main:app", host="0.0.0.0", port=8000, reload=True)
