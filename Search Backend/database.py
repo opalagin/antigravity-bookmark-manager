@@ -24,7 +24,15 @@ else:
         f"@{POSTGRES_HOST}:{POSTGRES_PORT}/{POSTGRES_DB}"
     )
 
-engine = create_async_engine(DATABASE_URL, echo=False, future=True)
+engine = create_async_engine(
+    DATABASE_URL, 
+    echo=False, 
+    future=True,
+    pool_size=2,
+    max_overflow=3,
+    pool_pre_ping=True,
+    pool_recycle=1800,
+)
 
 
 AsyncSessionLocal = sessionmaker(

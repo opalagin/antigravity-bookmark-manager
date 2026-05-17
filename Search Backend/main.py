@@ -85,6 +85,7 @@ class ChatResponse(BaseModel):
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    app.state.http = httpx.AsyncClient(timeout=10.0)
     # Startup: Idempotently initialize the database schema.
     # Works on Railway managed Postgres and local Docker Compose alike.
     async with engine.begin() as conn:
@@ -131,6 +132,7 @@ async def lifespan(app: FastAPI):
         """))
     yield
     # Shutdown
+    await app.state.http.aclose()
     await engine.dispose()
 
 
@@ -160,6 +162,7 @@ security = HTTPBearer()
 import httpx
 
 async def get_current_user(
+    request: Request,
     credentials: HTTPAuthorizationCredentials = Depends(security),
     session: AsyncSession = Depends(get_session)
 ):
@@ -170,11 +173,10 @@ async def get_current_user(
     # This checks if the access token is valid and returns user info.
     # It is slower than JWT verification but requires less setup (no keys).
     try:
-        async with httpx.AsyncClient(timeout=10.0) as client:
-            response = await client.get(
-                "https://www.googleapis.com/oauth2/v3/userinfo",
-                headers={"Authorization": f"Bearer {token}"}
-            )
+        response = await request.app.state.http.get(
+            "https://www.googleapis.com/oauth2/v3/userinfo",
+            headers={"Authorization": f"Bearer {token}"}
+        )
         
         if response.status_code != 200:
             # Fallback for Development/Testing (Mock Auth if Token is simple string)

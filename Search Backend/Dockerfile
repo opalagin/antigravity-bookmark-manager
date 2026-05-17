@@ -18,7 +18,10 @@ RUN pip install --prefix=/install -r requirements.txt
 FROM python:3.11-slim
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
-    PYTHONUNBUFFERED=1
+    PYTHONUNBUFFERED=1 \
+    PYTHONMALLOC=malloc \
+    MALLOC_TRIM_THRESHOLD_=100000 \
+    MALLOC_ARENA_MAX=2
 
 WORKDIR /app
 

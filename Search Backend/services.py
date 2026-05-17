@@ -7,9 +7,34 @@ from models import Bookmark, BookmarkEmbedding
 from database import get_session
 import asyncio
 import os
+import gc, ctypes, sys
 from openai import AsyncOpenAI
 import httpx
 from datetime import datetime
+
+try:
+    _libc = ctypes.CDLL("libc.so.6")
+except OSError:
+    _libc = None
+
+def _release_memory():
+    gc.collect()
+    if _libc is not None:
+        try:
+            _libc.malloc_trim(0)
+        except Exception:
+            pass
+
+_openai_client: AsyncOpenAI | None = None
+
+def _get_openai_client() -> AsyncOpenAI | None:
+    global _openai_client
+    api_key = os.getenv("OPENAI_API_KEY")
+    if not api_key:
+        return None
+    if _openai_client is None:
+        _openai_client = AsyncOpenAI(api_key=api_key)
+    return _openai_client
 
 def split_text(text: str, chunk_size: int = 1000, overlap: int = 200) -> list[str]:
     if len(text) <= chunk_size:
@@ -24,19 +49,21 @@ def split_text(text: str, chunk_size: int = 1000, overlap: int = 200) -> list[st
 # --- Embedding Service ---
 class EmbeddingService:
     def __init__(self):
-        self.model = TextEmbedding("BAAI/bge-small-en-v1.5")
+        self.model = TextEmbedding("BAAI/bge-small-en-v1.5", threads=1)
 
     def _embed_sync(self, texts: List[str]) -> List[List[float]]:
         # fastembed yields generators, so convert to list explicitly
-        return [embedding.tolist() for embedding in self.model.embed(texts)]
+        return [embedding.tolist() for embedding in self.model.embed(texts, parallel=0)]
 
     async def embed_documents(self, texts: List[str]) -> List[List[float]]:
         # Offload blocking work to threadpool
-        return await asyncio.to_thread(self._embed_sync, texts)
+        result = await asyncio.to_thread(self._embed_sync, texts)
+        _release_memory()
+        return result
     
     async def embed_query(self, text: str) -> List[float]:
         def _query_embed_sync():
-            return next(self.model.query_embed(text)).tolist()
+            return next(self.model.query_embed(text, parallel=0)).tolist()
         return await asyncio.to_thread(_query_embed_sync)
 
 # Singleton instance
@@ -180,7 +207,6 @@ class SearchService:
 
         # 2. LLM Generation
         llm_provider = os.getenv("LLM_PROVIDER", "openai").lower()
-        api_key = os.getenv("OPENAI_API_KEY")
         
         system_prompt = """
 You are a helpful assistant oriented to guide users in finding relevant information from their bookmarks.
@@ -225,13 +251,13 @@ Formatting requirements:
             except Exception as e:
                 return f"Error contacting Ollama: {str(e)}", sources
 
-        if not api_key:
+        client = _get_openai_client()
+        if not client:
             # Fallback Mock
             answer = f"**[Mock AI Response]**\n\nBased on your bookmarks, here is what I found:\n\n{context_text[:500]}... (truncated for mock)\n\n*Note: Set OPENAI_API_KEY to get real answers.*"
             return answer, sources
 
         try:
-            client = AsyncOpenAI(api_key=api_key)
             response = await client.chat.completions.create(
                 model="gpt-4o-mini",
                 messages=[
@@ -245,9 +271,12 @@ Formatting requirements:
 
     async def get_recent(self, session: AsyncSession, user_id: str, limit: int = 10):
         # Return list of Bookmarks
-        stmt = select(Bookmark).where(Bookmark.user_id == user_id).order_by(Bookmark.created_at.desc()).limit(limit)
+        stmt = select(
+            Bookmark.id, Bookmark.url, Bookmark.title, Bookmark.tags,
+            Bookmark.created_at, Bookmark.updated_at
+        ).where(Bookmark.user_id == user_id).order_by(Bookmark.created_at.desc()).limit(limit)
         result = await session.execute(stmt)
-        return result.scalars().all()
+        return result.all()
 
 search_service = SearchService(embedding_service)
 
@@ -257,27 +286,30 @@ class ManagementService:
         self.reembed_jobs: dict[str, dict] = {}
 
     async def get_bookmarks(self, session: AsyncSession, user_id: str, skip: int = 0, limit: int = 50, tag_prefix: str = None, query: str = None):
-        stmt = select(Bookmark).where(Bookmark.user_id == user_id)
+        base = select(
+            Bookmark.id, Bookmark.url, Bookmark.title, Bookmark.tags,
+            Bookmark.created_at, Bookmark.updated_at
+        ).where(Bookmark.user_id == user_id)
         
         if tag_prefix:
             if tag_prefix == "untagged":
-                stmt = stmt.where((Bookmark.tags == '{}') | (Bookmark.tags == None))
+                base = base.where((Bookmark.tags == '{}') | (Bookmark.tags == None))
             else:
                 # Match exact tag or nested tags under this prefix
-                stmt = stmt.where(text("EXISTS (SELECT 1 FROM unnest(tags) tag WHERE tag = :tag_exact OR tag LIKE :tag_prefix)")).params(tag_exact=tag_prefix, tag_prefix=f"{tag_prefix}/%")
+                base = base.where(text("EXISTS (SELECT 1 FROM unnest(tags) tag WHERE tag = :tag_exact OR tag LIKE :tag_prefix)")).params(tag_exact=tag_prefix, tag_prefix=f"{tag_prefix}/%")
             
         if query:
-            stmt = stmt.where(Bookmark.title.ilike(f"%{query}%") | Bookmark.url.ilike(f"%{query}%"))
+            base = base.where(Bookmark.title.ilike(f"%{query}%") | Bookmark.url.ilike(f"%{query}%"))
             
         # Get total count
-        count_stmt = select(func.count()).select_from(stmt.subquery())
+        count_stmt = select(func.count()).select_from(base.subquery())
         total_result = await session.execute(count_stmt)
         total = total_result.scalar_one()
         
         # Get paginated results
-        stmt = stmt.order_by(Bookmark.created_at.desc()).offset(skip).limit(limit)
+        stmt = base.order_by(Bookmark.created_at.desc()).offset(skip).limit(limit)
         result = await session.execute(stmt)
-        bookmarks = result.scalars().all()
+        bookmarks = result.all()
         
         return bookmarks, total
 
@@ -322,32 +354,35 @@ class ManagementService:
         return True
 
     async def bulk_update_tags(self, session: AsyncSession, user_id: str, old_prefix: str, new_prefix: str):
-        stmt = select(Bookmark).where(Bookmark.user_id == user_id).where(text("EXISTS (SELECT 1 FROM unnest(tags) tag WHERE tag = :old_exact OR tag LIKE :old_prefix)")).params(old_exact=old_prefix, old_prefix=f"{old_prefix}/%")
-        result = await session.execute(stmt)
-        bookmarks = result.scalars().all()
-        
-        updated_count = 0
-        for bookmark in bookmarks:
-            new_tags = []
-            changed = False
-            for tag in bookmark.tags:
-                if tag == old_prefix:
-                    new_tags.append(new_prefix)
-                    changed = True
-                elif tag.startswith(old_prefix + "/"):
-                    new_tag = new_prefix + tag[len(old_prefix):]
-                    new_tags.append(new_tag)
-                    changed = True
-                else:
-                    new_tags.append(tag)
-                    
-            if changed:
-                bookmark.tags = new_tags
-                bookmark.updated_at = datetime.utcnow()
-                updated_count += 1
-                
+        # Exact-tag rename
+        exact = await session.execute(text("""
+            UPDATE bookmarks
+            SET tags = array_replace(tags, :old, :new), updated_at = NOW()
+            WHERE user_id = :uid AND :old = ANY(tags)
+        """), {"uid": user_id, "old": old_prefix, "new": new_prefix})
+
+        # Nested prefix rename (e.g. "work/foo" -> "personal/foo")
+        nested = await session.execute(text("""
+            UPDATE bookmarks
+            SET tags = (
+                SELECT array_agg(
+                    CASE WHEN tag LIKE :old_prefix
+                         THEN :new || substring(tag from :cutoff)
+                         ELSE tag END
+                )
+                FROM unnest(tags) tag
+            ),
+            updated_at = NOW()
+            WHERE user_id = :uid
+              AND EXISTS (SELECT 1 FROM unnest(tags) tag WHERE tag LIKE :old_prefix)
+        """), {
+            "uid": user_id,
+            "old_prefix": f"{old_prefix}/%",
+            "new": new_prefix,
+            "cutoff": len(old_prefix) + 1,
+        })
         await session.commit()
-        return updated_count
+        return exact.rowcount + nested.rowcount
 
     async def bulk_delete(self, session: AsyncSession, user_id: str, bookmark_ids: List[str]):
         # Resolve only bookmark IDs that are actually owned by this user to prevent
@@ -371,86 +406,63 @@ class ManagementService:
         return result.rowcount
 
     async def bulk_add_tag(self, session: AsyncSession, user_id: str, bookmark_ids: List[str], tag: str):
-        stmt = select(Bookmark).where(Bookmark.user_id == user_id, Bookmark.id.in_(bookmark_ids))
-        result = await session.execute(stmt)
-        bookmarks = result.scalars().all()
-        
-        updated_count = 0
-        for bookmark in bookmarks:
-            if tag not in bookmark.tags:
-                new_tags = list(bookmark.tags)
-                new_tags.append(tag)
-                bookmark.tags = new_tags
-                bookmark.updated_at = datetime.utcnow()
-                updated_count += 1
-                
+        result = await session.execute(text("""
+            UPDATE bookmarks
+            SET tags = array_append(tags, :tag), updated_at = NOW()
+            WHERE user_id = :uid AND id = ANY(:ids) AND NOT (:tag = ANY(tags))
+        """), {"uid": user_id, "ids": bookmark_ids, "tag": tag})
         await session.commit()
-        return updated_count
+        return result.rowcount
 
     async def bulk_remove_tag(self, session: AsyncSession, user_id: str, bookmark_ids: List[str], tag: str):
-        stmt = select(Bookmark).where(Bookmark.user_id == user_id, Bookmark.id.in_(bookmark_ids))
-        result = await session.execute(stmt)
-        bookmarks = result.scalars().all()
-        
-        updated_count = 0
-        for bookmark in bookmarks:
-            if tag in bookmark.tags:
-                new_tags = [t for t in bookmark.tags if t != tag]
-                bookmark.tags = new_tags
-                bookmark.updated_at = datetime.utcnow()
-                updated_count += 1
-                
+        result = await session.execute(text("""
+            UPDATE bookmarks
+            SET tags = array_remove(tags, :tag), updated_at = NOW()
+            WHERE user_id = :uid AND id = ANY(:ids) AND :tag = ANY(tags)
+        """), {"uid": user_id, "ids": bookmark_ids, "tag": tag})
         await session.commit()
-        return updated_count
+        return result.rowcount
 
     async def reembed_user_bookmarks(self, user_id: str):
         self.reembed_jobs[user_id] = {"status": "starting", "total": 0, "processed": 0, "error": None}
         
         try:
             async for session in get_session():
-                stmt = select(Bookmark).where(Bookmark.user_id == user_id)
-                result = await session.execute(stmt)
-                bookmarks = result.scalars().all()
-                
-                total = len(bookmarks)
-                self.reembed_jobs[user_id]["total"] = total
-                self.reembed_jobs[user_id]["status"] = "running"
+                id_rows = await session.execute(
+                    select(Bookmark.id).where(Bookmark.user_id == user_id)
+                )
+                ids = [row[0] for row in id_rows.all()]
+                total = len(ids)
+                self.reembed_jobs[user_id].update(total=total, status="running")
                 
                 if total == 0:
                     self.reembed_jobs[user_id]["status"] = "completed"
                     break
                 
-                # P1 fix: delete embeddings lazily per-bookmark right before re-embedding,
-                # so a failure mid-loop never leaves the user with missing embeddings.
                 processed = 0
-                for b in bookmarks:
-                    if not b.content_markdown:
-                        processed += 1
-                        self.reembed_jobs[user_id]["processed"] = processed
-                        continue
+                for bid in ids:
+                    b = (await session.execute(
+                        select(Bookmark).where(Bookmark.id == bid)
+                    )).scalar_one()
                     
-                    chunks = split_text(b.content_markdown)
-                    if not chunks:
-                        processed += 1
-                        self.reembed_jobs[user_id]["processed"] = processed
-                        continue
-
-                    # Remove old embeddings for this bookmark only right before replacing them
-                    del_stmt = delete(BookmarkEmbedding).where(BookmarkEmbedding.bookmark_id == b.id)
-                    await session.execute(del_stmt)
-
-                    embeddings = await ingestion_service.embedding_service.embed_documents(chunks)
-                    for i, (text, vector) in enumerate(zip(chunks, embeddings)):
-                        emb_entry = BookmarkEmbedding(
-                            bookmark_id=b.id,
-                            chunk_index=i,
-                            chunk_text=text,
-                            embedding=vector
-                        )
-                        session.add(emb_entry)
+                    if b.content_markdown:
+                        chunks = split_text(b.content_markdown)
+                        if chunks:
+                            await session.execute(
+                                delete(BookmarkEmbedding).where(
+                                    BookmarkEmbedding.bookmark_id == b.id
+                                )
+                            )
+                            embeddings = await ingestion_service.embedding_service.embed_documents(chunks)
+                            for i, (chunk_text, vector) in enumerate(zip(chunks, embeddings)):
+                                session.add(BookmarkEmbedding(
+                                    bookmark_id=b.id, chunk_index=i,
+                                    chunk_text=chunk_text, embedding=vector,
+                                ))
                     
-                    # Commit per bookmark to save memory and ensure partial progress is saved
                     await session.commit()
+                    session.expunge(b)  # drop from identity map immediately
+                    _release_memory()   # see A2
                     processed += 1
                     self.reembed_jobs[user_id]["processed"] = processed
                     
