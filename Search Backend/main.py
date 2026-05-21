@@ -125,6 +125,23 @@ async def lifespan(app: FastAPI):
             "ON bookmark_embeddings(bookmark_id)"
         ))
         await conn.execute(text("""
+            CREATE TABLE IF NOT EXISTS bookmark_embeddings_openai (
+                id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+                bookmark_id UUID REFERENCES bookmarks(id) ON DELETE CASCADE,
+                chunk_index INTEGER NOT NULL,
+                chunk_text TEXT NOT NULL,
+                embedding VECTOR(1536)
+            )
+        """))
+        await conn.execute(text(
+            "CREATE INDEX IF NOT EXISTS embedding_openai_idx "
+            "ON bookmark_embeddings_openai USING hnsw (embedding vector_cosine_ops)"
+        ))
+        await conn.execute(text(
+            "CREATE INDEX IF NOT EXISTS idx_bookmark_embeddings_openai_bookmark_id "
+            "ON bookmark_embeddings_openai(bookmark_id)"
+        ))
+        await conn.execute(text("""
             CREATE TABLE IF NOT EXISTS allowed_users (
                 email TEXT PRIMARY KEY,
                 created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP

@@ -1,5 +1,5 @@
 import asyncio
-from unittest.mock import patch, MagicMock
+from unittest.mock import patch, MagicMock, AsyncMock
 from httpx import AsyncClient
 from httpx import ASGITransport
 from sqlmodel import select
@@ -32,7 +32,7 @@ async def run_tests_async():
     
     # 2. Async Client
     transport = ASGITransport(app=app)
-    async with AsyncClient(transport=transport, base_url="http://test") as client:
+    async with app.router.lifespan_context(app), AsyncClient(transport=transport, base_url="http://test") as client:
     
         # Data
         valid_token = "valid_token"
@@ -40,7 +40,7 @@ async def run_tests_async():
         
         print("Starting Security Verification...")
         
-        with patch("requests.get") as mock_get:
+        with patch("httpx.AsyncClient.get", new_callable=AsyncMock) as mock_get:
             # Mock Response Object
             mock_resp = MagicMock()
             mock_resp.status_code = 200

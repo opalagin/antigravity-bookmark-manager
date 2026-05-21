@@ -1,14 +1,13 @@
-from typing import List
-from sqlmodel import select, delete
+from typing import List, Protocol, Optional, Type
+from sqlmodel import select, delete, SQLModel
 from sqlalchemy import func, text
 from sqlmodel.ext.asyncio.session import AsyncSession
-from fastembed import TextEmbedding
-from models import Bookmark, BookmarkEmbedding
+from models import Bookmark, BookmarkEmbedding, BookmarkEmbeddingOpenAI
 from database import get_session
 import asyncio
 import os
 import gc, ctypes, sys
-from openai import AsyncOpenAI
+from openai import AsyncOpenAI, RateLimitError, APIConnectionError
 import httpx
 from datetime import datetime
 
@@ -46,9 +45,26 @@ def split_text(text: str, chunk_size: int = 1000, overlap: int = 200) -> list[st
         start += chunk_size - overlap
     return chunks
 
-# --- Embedding Service ---
-class EmbeddingService:
-    def __init__(self):
+# --- Embedding Provider Abstraction ---
+class EmbeddingProvider(Protocol):
+    name: str              # "local" | "openai"
+    dimension: int         # vector size produced by this provider
+    table_name: str        # pgvector table this provider's vectors live in
+    threshold: float       # default cosine distance threshold for search
+    model_class: Type[SQLModel]
+
+    async def embed_documents(self, texts: List[str]) -> List[List[float]]: ...
+    async def embed_query(self, text: str) -> List[float]: ...
+
+class LocalEmbeddingProvider:
+    name: str = "local"
+    dimension: int = 384
+    table_name: str = "bookmark_embeddings"
+    
+    def __init__(self, threshold: float = 0.4):
+        self.threshold = threshold
+        self.model_class = BookmarkEmbedding
+        from fastembed import TextEmbedding
         self.model = TextEmbedding("BAAI/bge-small-en-v1.5", threads=1)
 
     def _embed_sync(self, texts: List[str]) -> List[List[float]]:
@@ -66,20 +82,134 @@ class EmbeddingService:
             return next(self.model.query_embed(text, parallel=0)).tolist()
         return await asyncio.to_thread(_query_embed_sync)
 
-# Singleton instance
-embedding_service = EmbeddingService()
+class OpenAIEmbeddingProvider:
+    name: str = "openai"
+    table_name: str = "bookmark_embeddings_openai"
+
+    def __init__(self, model_name: str = "text-embedding-3-small", dimension: int = 1536, threshold: float = 0.6):
+        self.model_name = model_name
+        self.dimension = dimension
+        self.threshold = threshold
+        self.model_class = BookmarkEmbeddingOpenAI
+
+    async def _embed_with_retry(self, func, *args, **kwargs):
+        import random
+        retries = 3
+        delay = 1.0
+        for attempt in range(retries + 1):
+            try:
+                return await func(*args, **kwargs)
+            except (RateLimitError, APIConnectionError) as e:
+                if attempt == retries:
+                    raise e
+                jitter = random.uniform(0, 0.1 * delay)
+                sleep_time = delay + jitter
+                print(f"OpenAI embedding call failed due to {type(e).__name__}: {e}. Retrying in {sleep_time:.2f}s...")
+                await asyncio.sleep(sleep_time)
+                delay *= 2.0
+
+    async def embed_documents(self, texts: List[str]) -> List[List[float]]:
+        client = _get_openai_client()
+        if not client:
+            raise ValueError("OpenAI client not configured (missing OPENAI_API_KEY).")
+        
+        async def _call():
+            response = await client.embeddings.create(
+                input=texts,
+                model=self.model_name,
+                dimensions=self.dimension
+            )
+            return [data.embedding for data in response.data]
+            
+        return await self._embed_with_retry(_call)
+
+    async def embed_query(self, text: str) -> List[float]:
+        client = _get_openai_client()
+        if not client:
+            raise ValueError("OpenAI client not configured (missing OPENAI_API_KEY).")
+        
+        async def _call():
+            response = await client.embeddings.create(
+                input=[text],
+                model=self.model_name,
+                dimensions=self.dimension
+            )
+            return response.data[0].embedding
+            
+        return await self._embed_with_retry(_call)
+
+_provider_instance: EmbeddingProvider | None = None
+
+def get_provider() -> EmbeddingProvider:
+    global _provider_instance
+    if _provider_instance is not None:
+        return _provider_instance
+
+    provider_name = os.getenv("EMBEDDING_PROVIDER", "local").lower()
+    if provider_name == "local":
+        search_threshold_str = os.getenv("EMBEDDING_SEARCH_THRESHOLD")
+        threshold = 0.4
+        if search_threshold_str:
+            try:
+                threshold = float(search_threshold_str)
+            except ValueError:
+                raise ValueError(f"Invalid EMBEDDING_SEARCH_THRESHOLD: {search_threshold_str}")
+        _provider_instance = LocalEmbeddingProvider(threshold=threshold)
+    elif provider_name == "openai":
+        api_key = os.getenv("OPENAI_API_KEY")
+        if not api_key:
+            raise ValueError("OPENAI_API_KEY env variable must be set when EMBEDDING_PROVIDER is 'openai'.")
+        
+        model_name = os.getenv("OPENAI_EMBEDDING_MODEL", "text-embedding-3-small")
+        dimensions_str = os.getenv("OPENAI_EMBEDDING_DIMENSIONS", "1536")
+        try:
+            dimensions = int(dimensions_str)
+        except ValueError:
+            raise ValueError(f"Invalid OPENAI_EMBEDDING_DIMENSIONS value: {dimensions_str}. Must be an integer.")
+        
+        search_threshold_str = os.getenv("EMBEDDING_SEARCH_THRESHOLD")
+        threshold = 0.6
+        if search_threshold_str:
+            try:
+                threshold = float(search_threshold_str)
+            except ValueError:
+                raise ValueError(f"Invalid EMBEDDING_SEARCH_THRESHOLD value: {search_threshold_str}. Must be a float.")
+        
+        _provider_instance = OpenAIEmbeddingProvider(
+            model_name=model_name,
+            dimension=dimensions,
+            threshold=threshold
+        )
+    else:
+        raise ValueError(f"Unknown EMBEDDING_PROVIDER: '{provider_name}'")
+    
+    print(f"Initialized EmbeddingProvider: {_provider_instance.name} (dimension: {_provider_instance.dimension}, table: {_provider_instance.table_name}, threshold: {_provider_instance.threshold})")
+    return _provider_instance
+
+class LegacyEmbeddingServiceProxy:
+    def __getattr__(self, name):
+        return getattr(get_provider(), name)
+
+embedding_service = LegacyEmbeddingServiceProxy()
 
 
 # --- Ingestion Service ---
 class IngestionService:
-    def __init__(self, embedding_service: EmbeddingService):
-        self.embedding_service = embedding_service
+    def __init__(self, embedding_service: Optional[EmbeddingProvider] = None):
+        self._embedding_service = embedding_service
+
+    @property
+    def embedding_service(self) -> EmbeddingProvider:
+        return self._embedding_service or get_provider()
 
     async def process_bookmark(self, session: AsyncSession, user_id: str, url: str, title: str, content: str, tags: List[str] = []) -> Bookmark:
         # 1. Check if exists for this user
         stmt = select(Bookmark).where(Bookmark.url == url, Bookmark.user_id == user_id)
         result = await session.execute(stmt)
         existing_bookmark = result.scalar_one_or_none()
+
+        provider = get_provider()
+        model_cls = provider.model_class
 
         if existing_bookmark:
             # Update existing
@@ -89,7 +219,7 @@ class IngestionService:
             bookmark.tags = tags
             
             # Clear old embeddings to re-ingest
-            del_stmt = delete(BookmarkEmbedding).where(BookmarkEmbedding.bookmark_id == bookmark.id)
+            del_stmt = delete(model_cls).where(model_cls.bookmark_id == bookmark.id)
             await session.execute(del_stmt)
         else:
             # Create New
@@ -112,7 +242,7 @@ class IngestionService:
         
         # 4. Create Embedding Entries
         for i, (text, vector) in enumerate(zip(chunks, embeddings)):
-            emb_entry = BookmarkEmbedding(
+            emb_entry = model_cls(
                 bookmark_id=bookmark.id,
                 chunk_index=i,
                 chunk_text=text,
@@ -124,15 +254,24 @@ class IngestionService:
         await session.refresh(bookmark)
         return bookmark
 
-ingestion_service = IngestionService(embedding_service)
+ingestion_service = IngestionService()
 
 
 # --- Search Service ---
 class SearchService:
-    def __init__(self, embedding_service: EmbeddingService):
-        self.embedding_service = embedding_service
+    def __init__(self, embedding_service: Optional[EmbeddingProvider] = None):
+        self._embedding_service = embedding_service
 
-    async def search(self, session: AsyncSession, user_id: str, query: str, limit: int = 5, threshold: float = 0.4):
+    @property
+    def embedding_service(self) -> EmbeddingProvider:
+        return self._embedding_service or get_provider()
+
+    async def search(self, session: AsyncSession, user_id: str, query: str, limit: int = 5, threshold: Optional[float] = None):
+        provider = get_provider()
+        model_cls = provider.model_class
+        if threshold is None:
+            threshold = provider.threshold
+
         # 1. Embed Query
         query_vector = await self.embedding_service.embed_query(query)
         
@@ -143,9 +282,9 @@ class SearchService:
         candidate_limit = limit * 4 
         
         # Define distance expression for selection and ordering
-        distance_col = BookmarkEmbedding.embedding.cosine_distance(query_vector).label("distance")
+        distance_col = model_cls.embedding.cosine_distance(query_vector).label("distance")
         
-        stmt = select(BookmarkEmbedding, Bookmark, distance_col).join(Bookmark).where(
+        stmt = select(model_cls, Bookmark, distance_col).join(Bookmark).where(
             Bookmark.user_id == user_id
         ).order_by(
             distance_col
@@ -278,7 +417,7 @@ Formatting requirements:
         result = await session.execute(stmt)
         return result.all()
 
-search_service = SearchService(embedding_service)
+search_service = SearchService()
 
 # --- Management Service ---
 class ManagementService:
@@ -396,9 +535,11 @@ class ManagementService:
         if not owned_ids:
             return 0
 
-        # Delete embeddings scoped to confirmed owned bookmarks
+        # Delete embeddings scoped to confirmed owned bookmarks in both tables
         emb_stmt = delete(BookmarkEmbedding).where(BookmarkEmbedding.bookmark_id.in_(owned_ids))
         await session.execute(emb_stmt)
+        emb_openai_stmt = delete(BookmarkEmbeddingOpenAI).where(BookmarkEmbeddingOpenAI.bookmark_id.in_(owned_ids))
+        await session.execute(emb_openai_stmt)
 
         stmt = delete(Bookmark).where(Bookmark.user_id == user_id, Bookmark.id.in_(owned_ids))
         result = await session.execute(stmt)
@@ -445,17 +586,19 @@ class ManagementService:
                         select(Bookmark).where(Bookmark.id == bid)
                     )).scalar_one()
                     
+                    provider = get_provider()
+                    model_cls = provider.model_class
                     if b.content_markdown:
                         chunks = split_text(b.content_markdown)
                         if chunks:
                             await session.execute(
-                                delete(BookmarkEmbedding).where(
-                                    BookmarkEmbedding.bookmark_id == b.id
+                                delete(model_cls).where(
+                                    model_cls.bookmark_id == b.id
                                 )
                             )
-                            embeddings = await ingestion_service.embedding_service.embed_documents(chunks)
+                            embeddings = await provider.embed_documents(chunks)
                             for i, (chunk_text, vector) in enumerate(zip(chunks, embeddings)):
-                                session.add(BookmarkEmbedding(
+                                session.add(model_cls(
                                     bookmark_id=b.id, chunk_index=i,
                                     chunk_text=chunk_text, embedding=vector,
                                 ))
