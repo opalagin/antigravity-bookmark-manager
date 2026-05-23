@@ -216,7 +216,7 @@ class IngestionService:
         result = await session.execute(stmt)
         existing_bookmark = result.scalar_one_or_none()
 
-        provider = get_provider()
+        provider = self.embedding_service
         model_cls = provider.model_class
 
         if existing_bookmark:
@@ -275,7 +275,7 @@ class SearchService:
         return self._embedding_service or get_provider()
 
     async def search(self, session: AsyncSession, user_id: str, query: str, limit: int = 5, threshold: Optional[float] = None):
-        provider = get_provider()
+        provider = self.embedding_service
         model_cls = provider.model_class
         if threshold is None:
             threshold = provider.threshold
