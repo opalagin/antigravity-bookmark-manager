@@ -113,15 +113,23 @@ class OpenAIEmbeddingProvider:
         if not client:
             raise ValueError("OpenAI client not configured (missing OPENAI_API_KEY).")
         
-        async def _call():
-            response = await client.embeddings.create(
-                input=texts,
-                model=self.model_name,
-                dimensions=self.dimension
-            )
-            return [data.embedding for data in response.data]
+        # Batch size of 2048 is the standard maximum allowed input array length for OpenAI embeddings
+        batch_size = 2048
+        results = []
+        for i in range(0, len(texts), batch_size):
+            batch = texts[i:i + batch_size]
+            async def _call(b=batch):
+                response = await client.embeddings.create(
+                    input=b,
+                    model=self.model_name,
+                    dimensions=self.dimension
+                )
+                return [data.embedding for data in response.data]
             
-        return await self._embed_with_retry(_call)
+            batch_embeddings = await self._embed_with_retry(_call)
+            results.extend(batch_embeddings)
+            
+        return results
 
     async def embed_query(self, text: str) -> List[float]:
         client = _get_openai_client()
