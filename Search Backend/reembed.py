@@ -3,7 +3,7 @@ from sqlmodel.ext.asyncio.session import AsyncSession
 from sqlmodel import select, delete
 from database import get_session
 from models import Bookmark, BookmarkEmbedding
-from services import ingestion_service, split_text
+from services import get_provider, split_text
 
 async def reembed_all():
     print("Fetching all bookmarks...")
@@ -13,8 +13,11 @@ async def reembed_all():
         result = await session.execute(stmt)
         bookmarks = result.scalars().all()
         
-        print(f"Found {len(bookmarks)} bookmarks. Deleting old embeddings...")
-        await session.execute(delete(BookmarkEmbedding))
+        provider = get_provider()
+        model_cls = provider.model_class
+        
+        print(f"Found {len(bookmarks)} bookmarks for provider '{provider.name}'. Deleting old embeddings...")
+        await session.execute(delete(model_cls))
         await session.commit()
         
         print("Re-embedding bookmarks...")
@@ -26,9 +29,9 @@ async def reembed_all():
             if not chunks:
                 continue
                 
-            embeddings = await ingestion_service.embedding_service.embed_documents(chunks)
+            embeddings = await provider.embed_documents(chunks)
             for i, (text, vector) in enumerate(zip(chunks, embeddings)):
-                emb_entry = BookmarkEmbedding(
+                emb_entry = model_cls(
                     bookmark_id=b.id,
                     chunk_index=i,
                     chunk_text=text,

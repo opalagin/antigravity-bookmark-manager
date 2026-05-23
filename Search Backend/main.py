@@ -13,7 +13,7 @@ from contextlib import asynccontextmanager
 from sqlmodel.ext.asyncio.session import AsyncSession
 
 from database import get_session, engine
-from models import Bookmark, AllowedUser
+from models import Bookmark, AllowedUser, openai_dim
 
 from services import ingestion_service, search_service, management_service
 # --- Pydantic Models ---
@@ -124,12 +124,35 @@ async def lifespan(app: FastAPI):
             "CREATE INDEX IF NOT EXISTS idx_bookmark_embeddings_bookmark_id "
             "ON bookmark_embeddings(bookmark_id)"
         ))
+        await conn.execute(text(f"""
+            CREATE TABLE IF NOT EXISTS bookmark_embeddings_openai (
+                id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+                bookmark_id UUID REFERENCES bookmarks(id) ON DELETE CASCADE,
+                chunk_index INTEGER NOT NULL,
+                chunk_text TEXT NOT NULL,
+                embedding VECTOR({openai_dim})
+            )
+        """))
+        await conn.execute(text(
+            "CREATE INDEX IF NOT EXISTS idx_bookmark_embeddings_openai_bookmark_id "
+            "ON bookmark_embeddings_openai(bookmark_id)"
+        ))
         await conn.execute(text("""
             CREATE TABLE IF NOT EXISTS allowed_users (
                 email TEXT PRIMARY KEY,
                 created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
             )
         """))
+
+    # Idempotently attempt to create HNSW index in a separate transaction block
+    try:
+        async with engine.begin() as conn:
+            await conn.execute(text(
+                "CREATE INDEX IF NOT EXISTS embedding_openai_idx "
+                "ON bookmark_embeddings_openai USING hnsw (embedding vector_cosine_ops)"
+            ))
+    except Exception as e:
+        print(f"Warning: Could not create HNSW index for OpenAI embeddings: {e}. Falling back to linear scan.")
     yield
     # Shutdown
     await app.state.http.aclose()

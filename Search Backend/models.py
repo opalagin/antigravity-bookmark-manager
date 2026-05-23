@@ -5,6 +5,12 @@ from sqlmodel import Field, SQLModel, Relationship, Column, TIMESTAMP, UniqueCon
 from pgvector.sqlalchemy import Vector
 from sqlalchemy import func
 from sqlalchemy.dialects.postgresql import ARRAY, VARCHAR
+import os
+
+try:
+    openai_dim = int(os.getenv("OPENAI_EMBEDDING_DIMENSIONS", "1536"))
+except ValueError:
+    openai_dim = 1536
 
 class Bookmark(SQLModel, table=True):
     __tablename__ = "bookmarks"
@@ -28,6 +34,10 @@ class Bookmark(SQLModel, table=True):
         back_populates="bookmark",
         sa_relationship_kwargs={"cascade": "all, delete-orphan"}
     )
+    embeddings_openai: List["BookmarkEmbeddingOpenAI"] = Relationship(
+        back_populates="bookmark",
+        sa_relationship_kwargs={"cascade": "all, delete-orphan"}
+    )
 
 class BookmarkEmbedding(SQLModel, table=True):
     __tablename__ = "bookmark_embeddings"
@@ -40,6 +50,18 @@ class BookmarkEmbedding(SQLModel, table=True):
     
     # Relationship
     bookmark: Optional[Bookmark] = Relationship(back_populates="embeddings")
+
+class BookmarkEmbeddingOpenAI(SQLModel, table=True):
+    __tablename__ = "bookmark_embeddings_openai"
+    
+    id: Optional[UUID] = Field(default_factory=uuid4, primary_key=True)
+    bookmark_id: UUID = Field(foreign_key="bookmarks.id")
+    chunk_index: int
+    chunk_text: str
+    embedding: List[float] = Field(sa_column=Column(Vector(openai_dim)))
+    
+    # Relationship
+    bookmark: Optional[Bookmark] = Relationship(back_populates="embeddings_openai")
 
 class AllowedUser(SQLModel, table=True):
     __tablename__ = "allowed_users"
