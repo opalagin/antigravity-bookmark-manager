@@ -1,0 +1,41 @@
+{
+  "include": [
+    "Search Backend"
+  ],
+  "exclude": [
+    "**/__pycache__",
+    "**/.venv",
+    "**/node_modules",
+    "Chrome Plugin",
+    "Firefox Plugin",
+    "Storage",
+    "Docs"
+  ],
+  "ignore": [
+    "Search Backend/.venv"
+  ],
+  "venvPath": "Search Backend",
+  "venv": ".venv",
+  "pythonVersion": "3.11",
+  "pythonPlatform": "Linux",
+  "typeCheckingMode": "basic",
+  "useLibraryCodeForTypes": true,
+  "reportMissingImports": "error",
+  "reportMissingTypeStubs": "none",
+  "reportUnusedImport": "warning",
+  "reportUnusedVariable": "warning",
+  "reportDuplicateImport": "warning",
+  "reportGeneralTypeIssues": "warning",
+  "reportOptionalMemberAccess": "warning",
+  "reportOptionalSubscript": "warning",
+  "reportPrivateImportUsage": "none",
+  "executionEnvironments": [
+    {
+      "root": "Search Backend",
+      "pythonVersion": "3.11",
+      "extraPaths": [
+        "Search Backend"
+      ]
+    }
+  ]
+}
