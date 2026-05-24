@@ -266,9 +266,20 @@ async def get_current_user(
                         is_allowed = result.scalar_one_or_none()
                         if is_allowed:
                             return user_id
-            except Exception:
+                        else:
+                            print(f"Fallback Denied: Email '{email}' is not in allowed list.")
+                            raise HTTPException(status_code=403, detail="Pilot Mode: Access restricted to allowed users only.")
+                    else:
+                        print("Fallback Denied: Google response missing sub or email.")
+                else:
+                    print(f"Fallback Denied: Google userinfo endpoint returned status {response.status_code}")
+            except HTTPException:
+                raise
+            except Exception as ex:
+                print(f"Fallback exception: {ex}")
                 pass
         raise HTTPException(status_code=401, detail=f"Invalid token: {e}")
+
 
 
 # --- Endpoints ---
