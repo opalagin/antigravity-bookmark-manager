@@ -11,9 +11,15 @@ from datetime import datetime
 import uvicorn
 from contextlib import asynccontextmanager
 from sqlmodel.ext.asyncio.session import AsyncSession
+from fastapi import Response
+from uuid import UUID, uuid4
+from datetime import timedelta, timezone
+import jwt
 
 from database import get_session, engine
-from models import Bookmark, AllowedUser, openai_dim
+from models import Bookmark, AllowedUser, RefreshToken, openai_dim
+import auth
+import settings
 
 from services import ingestion_service, search_service, management_service
 # --- Pydantic Models ---
@@ -83,9 +89,28 @@ class ChatResponse(BaseModel):
     sources: List[str]
 
 
+class GoogleAuthRequest(BaseModel):
+    google_access_token: str
+
+
+class RefreshTokenRequest(BaseModel):
+    refresh_token: str
+
+
+class LogoutRequest(BaseModel):
+    refresh_token: str
+
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    # Fail-fast check for JWT secret in production
+    if settings.ENVIRONMENT == "production":
+        if not settings.JWT_SECRET or len(settings.JWT_SECRET) < 32:
+            raise ValueError("JWT_SECRET must be set and at least 32 bytes in production")
+
     app.state.http = httpx.AsyncClient(timeout=10.0)
+
     # Startup: Idempotently initialize the database schema.
     # Works on Railway managed Postgres and local Docker Compose alike.
     async with engine.begin() as conn:
@@ -143,6 +168,23 @@ async def lifespan(app: FastAPI):
                 created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
             )
         """))
+        await conn.execute(text("""
+            CREATE TABLE IF NOT EXISTS refresh_tokens (
+                jti UUID PRIMARY KEY,
+                user_sub TEXT NOT NULL,
+                email TEXT NOT NULL,
+                created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+                expires_at TIMESTAMPTZ NOT NULL,
+                last_used_at TIMESTAMPTZ,
+                revoked_at TIMESTAMPTZ,
+                user_agent TEXT
+            )
+        """))
+        await conn.execute(text("""
+            CREATE INDEX IF NOT EXISTS refresh_tokens_user_sub_idx
+                ON refresh_tokens (user_sub) WHERE revoked_at IS NULL
+        """))
+
 
     # Idempotently attempt to create HNSW index in a separate transaction block
     try:
@@ -188,71 +230,242 @@ async def get_current_user(
     request: Request,
     credentials: HTTPAuthorizationCredentials = Depends(security),
     session: AsyncSession = Depends(get_session)
-):
-
+) -> str:
     token = credentials.credentials
-    
-    # 1. OPTION A: Simple Validation via Provider (Google)
-    # This checks if the access token is valid and returns user info.
-    # It is slower than JWT verification but requires less setup (no keys).
+
+    # Dev fallback preserved — mock tokens starting with "user_" still pass in dev
+    if token.startswith("user_"):
+        if settings.ENVIRONMENT == "production":
+            raise HTTPException(status_code=401, detail="Mock auth tokens are not permitted in production")
+        return token
+
     try:
-        response = await request.app.state.http.get(
-            "https://www.googleapis.com/oauth2/v3/userinfo",
-            headers={"Authorization": f"Bearer {token}"}
-        )
-        
-        if response.status_code != 200:
-            # Fallback for Development/Testing (Mock Auth if Token is simple string)
-            if token.startswith("user_"): 
-                return token # Allow mock tokens for now if they match pattern
-            
-            raise HTTPException(status_code=401, detail=f"Invalid Authentication Token. Status: {response.status_code}, Resp: {response.text[:100]}")
-            
-        user_info = response.json()
-        # Use 'sub' (Subject) as the immutable unique user ID
-        user_id = user_info.get("sub")
-        email = user_info.get("email")
+        payload = auth.decode_token(token, typ="access")
+        sub = payload.get("sub")
+        if not sub:
+            raise HTTPException(status_code=401, detail="Token missing subject")
+        return sub
+    except jwt.ExpiredSignatureError:
+        raise HTTPException(status_code=401, detail="Token expired")
+    except jwt.InvalidTokenError as e:
+        # Check migration fallback flag for legacy Google OAuth tokens
+        if settings.AUTH_ALLOW_LEGACY_GOOGLE_TOKEN:
+            try:
+                response = await request.app.state.http.get(
+                    "https://www.googleapis.com/oauth2/v3/userinfo",
+                    headers={"Authorization": f"Bearer {token}"}
+                )
+                if response.status_code == 200:
+                    user_info = response.json()
+                    user_id = user_info.get("sub")
+                    email = user_info.get("email")
+                    if user_id and email:
+                        # Verify allowed user in db
+                        stmt = select(AllowedUser).where(AllowedUser.email == email)
+                        result = await session.execute(stmt)
+                        is_allowed = result.scalar_one_or_none()
+                        if is_allowed:
+                            return user_id
+                        else:
+                            print(f"Fallback Denied: Email '{email}' is not in allowed list.")
+                            raise HTTPException(status_code=403, detail="Pilot Mode: Access restricted to allowed users only.")
+                    else:
+                        print("Fallback Denied: Google response missing sub or email.")
+                else:
+                    print(f"Fallback Denied: Google userinfo endpoint returned status {response.status_code}")
+            except HTTPException:
+                raise
+            except Exception as ex:
+                print(f"Fallback exception: {ex}")
+                pass
+        raise HTTPException(status_code=401, detail=f"Invalid token: {e}")
 
-        if not user_id:
-            print("Auth Error: Token missing subject ID")
-            raise HTTPException(status_code=401, detail="Token missing subject ID")
-            
-        if not email:
-            print("Auth Error: Token missing email")
-            raise HTTPException(status_code=401, detail="Token missing email")
 
-        # Pilot Mode: Check Allowlist
-        try:
-            stmt = select(AllowedUser).where(AllowedUser.email == email)
-            result = await session.execute(stmt)
-            is_allowed = result.scalar_one_or_none()
-        except Exception as db_err:
-             print(f"DB Error checking allowlist: {db_err}")
-             raise HTTPException(status_code=500, detail="Database Error during Auth Check")
-        
-        if not is_allowed:
-             print(f"Pilot Mode Denied: {email}")
-             raise HTTPException(status_code=403, detail="Pilot Mode: Access restricted to allowed users only.")
-        
-        return user_id
-
-    except HTTPException:
-        raise
-    except Exception as e:
-         # Fallback for Development (Mock Auth)
-        if token.startswith("user_"):
-            return token
-            
-        print(f"Auth Exception: {e}")
-        import traceback
-        traceback.print_exc()
-        raise HTTPException(status_code=401, detail=f"Authentication Failed: {str(e)}")
 
 # --- Endpoints ---
 
 @app.get("/")
 async def root():
     return {"message": "Smart Bookmark Manager API is running"}
+
+
+@app.post("/auth/google")
+@limiter.limit("5/minute")
+async def auth_google(
+    request: Request,
+    payload: GoogleAuthRequest,
+    session: AsyncSession = Depends(get_session)
+):
+    google_token = payload.google_access_token
+    
+    # Dev fallback for Google token
+    if google_token.startswith("user_"):
+        if settings.ENVIRONMENT == "production":
+            raise HTTPException(status_code=400, detail="Mock auth not allowed in production")
+        sub = google_token
+        email = f"{google_token}@example.com"
+    else:
+        # 1. Validate the Google token
+        try:
+            response = await request.app.state.http.get(
+                "https://www.googleapis.com/oauth2/v3/userinfo",
+                headers={"Authorization": f"Bearer {google_token}"}
+            )
+            if response.status_code != 200:
+                raise HTTPException(status_code=401, detail="Invalid Google access token")
+        except Exception as e:
+            if isinstance(e, HTTPException):
+                raise
+            raise HTTPException(status_code=401, detail=f"Failed to validate Google token: {e}")
+            
+        user_info = response.json()
+        sub = user_info.get("sub")
+        email = user_info.get("email")
+        
+        if not sub or not email:
+            raise HTTPException(status_code=400, detail="Missing user identity details from Google")
+        
+    # 2. Pilot Mode Check
+    stmt = select(AllowedUser).where(AllowedUser.email == email)
+    result = await session.execute(stmt)
+    is_allowed = result.scalar_one_or_none()
+    if not is_allowed:
+        raise HTTPException(status_code=403, detail="Pilot Mode: Access restricted to allowed users only.")
+        
+    # 3. Generate tokens
+    jti = uuid4()
+    access_token = auth.create_access_token(sub, email)
+    refresh_token = auth.create_refresh_token(sub, email, str(jti))
+    
+    # 4. Save refresh token to database
+    expires_at = datetime.now(timezone.utc) + timedelta(seconds=settings.JWT_REFRESH_TTL_SECONDS)
+    user_agent = request.headers.get("user-agent", "")[:255]
+    
+    db_token = RefreshToken(
+        jti=jti,
+        user_sub=sub,
+        email=email,
+        expires_at=expires_at,
+        user_agent=user_agent
+    )
+    session.add(db_token)
+    await session.commit()
+    
+    return {
+        "access_token": access_token,
+        "refresh_token": refresh_token,
+        "token_type": "Bearer",
+        "expires_in": settings.JWT_ACCESS_TTL_SECONDS,
+        "user": {
+            "sub": sub,
+            "email": email
+        }
+    }
+
+
+@app.post("/auth/refresh")
+@limiter.limit("30/minute")
+async def auth_refresh(
+    request: Request,
+    payload: RefreshTokenRequest,
+    session: AsyncSession = Depends(get_session)
+):
+    refresh_token = payload.refresh_token
+    
+    # 1. Decode & Verify local claims
+    try:
+        claims = auth.decode_token(refresh_token, typ="refresh")
+    except jwt.ExpiredSignatureError:
+        raise HTTPException(status_code=401, detail="Refresh token expired")
+    except jwt.InvalidTokenError as e:
+        raise HTTPException(status_code=401, detail=f"Invalid refresh token: {e}")
+        
+    jti_str = claims.get("jti")
+    if not jti_str:
+        raise HTTPException(status_code=401, detail="Refresh token missing JTI")
+        
+    try:
+        jti_uuid = UUID(jti_str)
+    except ValueError:
+        raise HTTPException(status_code=401, detail="Invalid JTI format")
+        
+    # 2. Look up in the database (with row locking to serialize concurrent refresh calls)
+    stmt = select(RefreshToken).where(RefreshToken.jti == jti_uuid).with_for_update()
+    result = await session.execute(stmt)
+    token_record = result.scalar_one_or_none()
+    
+    if not token_record:
+        raise HTTPException(status_code=401, detail="Refresh token not found or invalid")
+        
+    # 3. Check revocation and expiration in DB
+    now = datetime.now(timezone.utc)
+    if token_record.revoked_at is not None:
+        raise HTTPException(status_code=401, detail="Refresh token has been revoked")
+    if token_record.expires_at < now:
+        raise HTTPException(status_code=401, detail="Refresh token has expired in database")
+        
+    # 4. Verify user is still allowed (Pilot Mode)
+    stmt_allowed = select(AllowedUser).where(AllowedUser.email == token_record.email)
+    res_allowed = await session.execute(stmt_allowed)
+    is_allowed = res_allowed.scalar_one_or_none()
+    if not is_allowed:
+        raise HTTPException(status_code=403, detail="Pilot Mode: Access restricted to allowed users only.")
+        
+    # 5. Rotate tokens (single transaction)
+    token_record.revoked_at = now
+    token_record.last_used_at = now
+    session.add(token_record)
+    
+    new_jti = uuid4()
+    new_access_token = auth.create_access_token(token_record.user_sub, token_record.email)
+    new_refresh_token = auth.create_refresh_token(token_record.user_sub, token_record.email, str(new_jti))
+    
+    new_expires_at = now + timedelta(seconds=settings.JWT_REFRESH_TTL_SECONDS)
+    new_record = RefreshToken(
+        jti=new_jti,
+        user_sub=token_record.user_sub,
+        email=token_record.email,
+        expires_at=new_expires_at,
+        user_agent=request.headers.get("user-agent", "")[:255]
+    )
+    session.add(new_record)
+    await session.commit()
+    
+    return {
+        "access_token": new_access_token,
+        "refresh_token": new_refresh_token,
+        "token_type": "Bearer",
+        "expires_in": settings.JWT_ACCESS_TTL_SECONDS,
+        "user": {
+            "sub": token_record.user_sub,
+            "email": token_record.email
+        }
+    }
+
+
+@app.post("/auth/logout")
+async def auth_logout(
+    payload: LogoutRequest,
+    session: AsyncSession = Depends(get_session)
+):
+    refresh_token = payload.refresh_token
+    try:
+        claims = auth.decode_token(refresh_token, typ="refresh")
+        jti_str = claims.get("jti")
+        if jti_str:
+            jti_uuid = UUID(jti_str)
+            stmt = select(RefreshToken).where(RefreshToken.jti == jti_uuid)
+            result = await session.execute(stmt)
+            token_record = result.scalar_one_or_none()
+            if token_record and token_record.revoked_at is None:
+                token_record.revoked_at = datetime.now(timezone.utc)
+                session.add(token_record)
+                await session.commit()
+    except Exception:
+        # Best effort logout
+        pass
+    return Response(status_code=204)
+
 
 @app.post("/bookmarks", response_model=BookmarkResponse)
 @limiter.limit("10/minute")

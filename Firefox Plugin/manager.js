@@ -75,9 +75,9 @@ document.addEventListener('DOMContentLoaded', () => {
     // 1. Initialization
     async function init() {
         // Ensure token is set
-        const stored = await browser.storage.local.get('authToken');
-        if (stored.authToken) {
-            window.api.setToken(stored.authToken);
+        const stored = await browser.storage.local.get(['accessToken', 'refreshToken']);
+        if (stored.accessToken && stored.refreshToken) {
+            window.api.setTokens(stored.accessToken, stored.refreshToken);
             await loadTags();
             await loadBookmarks();
         } else {
