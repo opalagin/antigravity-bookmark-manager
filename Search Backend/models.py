@@ -71,3 +71,18 @@ class AllowedUser(SQLModel, table=True):
         sa_column=Column(TIMESTAMP(timezone=True), server_default=func.now())
     )
 
+
+class RefreshToken(SQLModel, table=True):
+    __tablename__ = "refresh_tokens"
+
+    jti: UUID = Field(primary_key=True, default_factory=uuid4)
+    user_sub: str = Field(index=True)
+    email: str
+    created_at: Optional[datetime] = Field(
+        sa_column=Column(TIMESTAMP(timezone=True), server_default=func.now())
+    )
+    expires_at: datetime = Field(sa_column=Column(TIMESTAMP(timezone=True), nullable=False))
+    last_used_at: Optional[datetime] = Field(sa_column=Column(TIMESTAMP(timezone=True)))
+    revoked_at: Optional[datetime] = Field(sa_column=Column(TIMESTAMP(timezone=True)))
+    user_agent: Optional[str] = None
+

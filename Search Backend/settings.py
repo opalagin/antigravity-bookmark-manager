@@ -1,0 +1,27 @@
+import os
+
+# Base configurations
+ENVIRONMENT = os.getenv("ENVIRONMENT", "development")
+
+# JWT configurations
+JWT_SECRET = os.getenv("JWT_SECRET")
+JWT_SECRET_PREVIOUS = os.getenv("JWT_SECRET_PREVIOUS")
+
+# Default values specified in the spec:
+# JWT_ACCESS_TTL_SECONDS: 30 minutes (1800)
+# JWT_REFRESH_TTL_SECONDS: 90 days (7776000)
+try:
+    JWT_ACCESS_TTL_SECONDS = int(os.getenv("JWT_ACCESS_TTL_SECONDS", "1800"))
+except ValueError:
+    JWT_ACCESS_TTL_SECONDS = 1800
+
+try:
+    JWT_REFRESH_TTL_SECONDS = int(os.getenv("JWT_REFRESH_TTL_SECONDS", "7776000"))
+except ValueError:
+    JWT_REFRESH_TTL_SECONDS = 7776000
+
+JWT_ISSUER = os.getenv("JWT_ISSUER", "smart-bookmark-manager")
+JWT_AUDIENCE = os.getenv("JWT_AUDIENCE", "api")
+
+# Migration and legacy token compatibility
+AUTH_ALLOW_LEGACY_GOOGLE_TOKEN = os.getenv("AUTH_ALLOW_LEGACY_GOOGLE_TOKEN", "0") in ("1", "true", "True")

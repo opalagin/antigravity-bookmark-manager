@@ -7,3 +7,4 @@ openai==1.63.2
 httpx==0.28.1
 slowapi==0.1.9
 fastembed==0.4.2
+pyjwt==2.9.0

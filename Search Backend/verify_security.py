@@ -1,12 +1,27 @@
 import asyncio
+import os
+import sys
+from uuid import UUID
+
+# Ensure we can import from the backend directory
+sys.path.append(os.path.dirname(os.path.abspath(__file__)))
+
+# 1. Set up a secure JWT_SECRET for testing if not already set, or validate it
+if "JWT_SECRET" not in os.environ:
+    os.environ["JWT_SECRET"] = "a" * 32
+elif len(os.environ["JWT_SECRET"]) < 32:
+    print("CRITICAL FAIL: JWT_SECRET is set but is shorter than 32 bytes.")
+    sys.exit(1)
+
 from unittest.mock import patch, MagicMock, AsyncMock
-from httpx import AsyncClient
-from httpx import ASGITransport
+from httpx import AsyncClient, ASGITransport
 from sqlmodel import select
 from sqlmodel.ext.asyncio.session import AsyncSession
 from sqlalchemy.orm import sessionmaker
 from database import engine
-from models import AllowedUser, SQLModel
+from models import AllowedUser, RefreshToken, SQLModel
+import settings
+import auth
 from main import app
 
 # Setup Async Session
@@ -33,23 +48,33 @@ async def run_tests_async():
     # 2. Async Client
     transport = ASGITransport(app=app)
     async with app.router.lifespan_context(app), AsyncClient(transport=transport, base_url="http://test") as client:
-    
-        # Data
-        valid_token = "valid_token"
-        headers = {"Authorization": f"Bearer {valid_token}"}
         
         print("Starting Security Verification...")
         
         with patch("httpx.AsyncClient.get", new_callable=AsyncMock) as mock_get:
-            # Mock Response Object
+            # Mock Response Object for external Google userinfo calls
             mock_resp = MagicMock()
             mock_resp.status_code = 200
             mock_get.return_value = mock_resp
             
-            # --- Scenario 1: Allowed User ---
-            print("\n[Test] Allowed User Access (Limit 10/min)")
+            # --- Scenario 1: Allowed User exchange Google Token & Access /bookmarks ---
+            print("\n[Test] Exchange Google Token for JWT & Access /bookmarks")
             mock_resp.json.return_value = {"sub": "123", "email": "test@example.com"}
             
+            # Request JWT session
+            auth_response = await client.post("/auth/google", json={"google_access_token": "google_token_123"})
+            print(f"Auth Response Code: {auth_response.status_code}")
+            if auth_response.status_code != 200:
+                print(f"FAIL: Google exchange failed. {auth_response.text}")
+                sys.exit(1)
+                
+            auth_data = auth_response.json()
+            access_token = auth_data["access_token"]
+            refresh_token = auth_data["refresh_token"]
+            print("PASS: Successfully exchanged Google token for JWT session.")
+            
+            # Attempt access to protected /bookmarks using the returned access JWT
+            headers = {"Authorization": f"Bearer {access_token}"}
             payload = {
                 "url": "http://example.com/1",
                 "title": "Test 1",
@@ -58,44 +83,87 @@ async def run_tests_async():
             }
             
             response = await client.post("/bookmarks", json=payload, headers=headers)
-            print(f"Response: {response.status_code}")
+            print(f"Bookmarks Response: {response.status_code}")
             if response.status_code == 200:
-                print("PASS: Allowed user granted access.")
+                print("PASS: Allowed user granted access via JWT.")
             else:
                 print(f"FAIL: Allowed user denied. {response.text}")
+                sys.exit(1)
                 
             # --- Scenario 2: Disallowed User ---
-            print("\n[Test] Disallowed User Access")
+            print("\n[Test] Disallowed User Authentication Check")
             mock_resp.json.return_value = {"sub": "456", "email": "bad@example.com"}
             
-            payload["url"] = "http://example.com/2"
-            response = await client.post("/bookmarks", json=payload, headers=headers)
-            print(f"Response: {response.status_code}")
-            if response.status_code == 403:
-                 print("PASS: Disallowed user denied access.")
+            bad_auth_response = await client.post("/auth/google", json={"google_access_token": "google_token_456"})
+            print(f"Bad Auth Response Code: {bad_auth_response.status_code}")
+            if bad_auth_response.status_code == 403:
+                 print("PASS: Disallowed user denied JWT session creation.")
             else:
-                 print(f"FAIL: Disallowed user granted access. {response.text}")
+                 print(f"FAIL: Disallowed user granted JWT session creation. {bad_auth_response.text}")
+                 sys.exit(1)
 
-            # --- Scenario 3: Rate Limiting ---
+            # --- Scenario 3: Token Rotation ---
+            print("\n[Test] Token Rotation")
+            rotate_response = await client.post("/auth/refresh", json={"refresh_token": refresh_token})
+            print(f"Rotate Response Code: {rotate_response.status_code}")
+            if rotate_response.status_code == 200:
+                print("PASS: Token rotation succeeded.")
+                rotate_data = rotate_response.json()
+                new_access_token = rotate_data["access_token"]
+                new_refresh_token = rotate_data["refresh_token"]
+            else:
+                print(f"FAIL: Token rotation failed. {rotate_response.text}")
+                sys.exit(1)
+                
+            # Test Reuse Detection (Old refresh token should be revoked and fail)
+            print("\n[Test] Refresh Token Reuse Detection")
+            reuse_response = await client.post("/auth/refresh", json={"refresh_token": refresh_token})
+            print(f"Reuse Response Code: {reuse_response.status_code}")
+            if reuse_response.status_code == 401:
+                print("PASS: Reused refresh token rejected successfully.")
+            else:
+                print(f"FAIL: Reused refresh token was NOT rejected. Status: {reuse_response.status_code}")
+                sys.exit(1)
+
+            # --- Scenario 4: Token Revocation / Logout ---
+            print("\n[Test] Token Revocation / Logout")
+            logout_response = await client.post("/auth/logout", json={"refresh_token": new_refresh_token})
+            print(f"Logout Response Code: {logout_response.status_code}")
+            if logout_response.status_code == 204:
+                print("PASS: Logout request successfully executed.")
+            else:
+                print(f"FAIL: Logout request failed. Status: {logout_response.status_code}")
+                sys.exit(1)
+                
+            # Try to refresh again after logout - should fail
+            refresh_after_logout = await client.post("/auth/refresh", json={"refresh_token": new_refresh_token})
+            print(f"Refresh After Logout Code: {refresh_after_logout.status_code}")
+            if refresh_after_logout.status_code == 401:
+                print("PASS: Refresh after logout was rejected successfully.")
+            else:
+                print(f"FAIL: Refresh after logout succeeded! Status: {refresh_after_logout.status_code}")
+                sys.exit(1)
+
+            # --- Scenario 5: Rate Limiting ---
             print("\n[Test] Rate Limiting (Flood /bookmarks)")
-            # Reset to Allowed User
-            mock_resp.json.return_value = {"sub": "123", "email": "test@example.com"}
-            
-            # We sent 1 successful request above.
-            # Limit is 10/min.
-            # Send 11 more (Total 12).
-            
+            # Flood using the new rotated access token (we need to generate a new active session since we logged out the previous one)
+            # Or wait, new_access_token was already issued before logout. Logout only revokes the refresh token; the access token is stateless and technically valid until expiry (1800s). So we can reuse new_access_token to flood!
+            # Let's verify this!
+            headers = {"Authorization": f"Bearer {new_access_token}"}
             triggered = False
             for i in range(15):
                 payload["url"] = f"http://example.com/flood/{i}"
                 response = await client.post("/bookmarks", json=payload, headers=headers)
                 if response.status_code == 429:
-                    print(f"PASS: Rate limit triggered at request #{i+2} (Total).")
+                    print(f"PASS: Rate limit triggered at request #{i+1} of flood.")
                     triggered = True
                     break
             
             if not triggered:
                 print("FAIL: Rate limit NOT triggered.")
+                sys.exit(1)
+
+            print("\nALL SECURITY VERIFICATIONS PASSED!")
 
 if __name__ == "__main__":
     try:
@@ -103,3 +171,4 @@ if __name__ == "__main__":
     except Exception as e:
         import traceback
         traceback.print_exc()
+        sys.exit(1)
