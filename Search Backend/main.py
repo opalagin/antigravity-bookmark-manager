@@ -389,8 +389,8 @@ async def auth_refresh(
     except ValueError:
         raise HTTPException(status_code=401, detail="Invalid JTI format")
         
-    # 2. Look up in the database
-    stmt = select(RefreshToken).where(RefreshToken.jti == jti_uuid)
+    # 2. Look up in the database (with row locking to serialize concurrent refresh calls)
+    stmt = select(RefreshToken).where(RefreshToken.jti == jti_uuid).with_for_update()
     result = await session.execute(stmt)
     token_record = result.scalar_one_or_none()
     

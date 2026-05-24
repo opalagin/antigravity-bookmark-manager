@@ -5,6 +5,15 @@ ENVIRONMENT = os.getenv("ENVIRONMENT", "development")
 
 # JWT configurations
 JWT_SECRET = os.getenv("JWT_SECRET")
+if not JWT_SECRET:
+    if ENVIRONMENT == "production":
+        raise ValueError("JWT_SECRET environment variable is required in production!")
+    else:
+        JWT_SECRET = "dev_secret_key_at_least_32_bytes_long_fallback"
+elif len(JWT_SECRET) < 32:
+    if ENVIRONMENT == "production":
+        raise ValueError("JWT_SECRET must be at least 32 bytes in production!")
+
 JWT_SECRET_PREVIOUS = os.getenv("JWT_SECRET_PREVIOUS")
 
 # Default values specified in the spec:
