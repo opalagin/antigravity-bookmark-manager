@@ -1,18 +1,25 @@
 // API Base URL is now dynamic via browser.storage.local
 
 const api = {
-    token: null,
+    accessToken: null,
+    refreshToken: null,
+    refreshPromise: null, // to single-flight the refresh
 
-    setToken(token) {
-        this.token = token;
+    setTokens(accessToken, refreshToken) {
+        this.accessToken = accessToken;
+        this.refreshToken = refreshToken;
     },
 
-    getToken() {
-        return this.token;
+    getAccessToken() {
+        return this.accessToken;
+    },
+
+    getRefreshToken() {
+        return this.refreshToken;
     },
 
     async _fetch(endpoint, options = {}) {
-        if (!this.token) {
+        if (!this.accessToken) {
             throw new Error("No Auth Token. Please login.");
         }
 
@@ -22,14 +29,35 @@ const api = {
 
         const headers = {
             'Content-Type': 'application/json',
-            'Authorization': `Bearer ${this.token}`,
+            'Authorization': `Bearer ${this.accessToken}`,
             ...options.headers
         };
 
-        const response = await fetch(`${baseUrl}${endpoint}`, {
+        let response = await fetch(`${baseUrl}${endpoint}`, {
             ...options,
             headers: headers
         });
+
+        if (response.status === 401) {
+            // Try refreshing the token (single-flighted)
+            try {
+                await this._refresh();
+                // Retry once with the new access token
+                const newHeaders = {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${this.accessToken}`,
+                    ...options.headers
+                };
+                response = await fetch(`${baseUrl}${endpoint}`, {
+                    ...options,
+                    headers: newHeaders
+                });
+            } catch (refreshError) {
+                // If refresh fails, clear everything and propagate "Session expired"
+                await this.clearTokens();
+                throw new Error("Session expired. Please login again.");
+            }
+        }
 
         if (!response.ok) {
             if (response.status === 401) {
@@ -46,6 +74,53 @@ const api = {
 
         return await response.json();
     },
+
+    async _refresh() {
+        if (this.refreshPromise) {
+            return this.refreshPromise;
+        }
+
+        this.refreshPromise = (async () => {
+            if (!this.refreshToken) {
+                throw new Error("No refresh token available");
+            }
+
+            const result = await browser.storage.local.get("apiUrl");
+            const baseUrl = result.apiUrl || "http://localhost";
+
+            const response = await fetch(`${baseUrl}/auth/refresh`, {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json"
+                },
+                body: JSON.stringify({ refresh_token: this.refreshToken })
+            });
+
+            if (!response.ok) {
+                throw new Error("Token refresh request failed");
+            }
+
+            const data = await response.json();
+            this.setTokens(data.access_token, data.refresh_token);
+            await browser.storage.local.set({
+                accessToken: data.access_token,
+                refreshToken: data.refresh_token
+            });
+        })();
+
+        try {
+            await this.refreshPromise;
+        } finally {
+            this.refreshPromise = null;
+        }
+    },
+
+    async clearTokens() {
+        this.accessToken = null;
+        this.refreshToken = null;
+        await browser.storage.local.remove(["accessToken", "refreshToken", "authToken"]);
+    },
+
 
     async saveBookmark(url, title, content, tags = []) {
         return this._fetch('/bookmarks', {

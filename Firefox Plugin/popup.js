@@ -268,9 +268,15 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // Auth & Init
     async function checkAuth() {
-        const stored = await browser.storage.local.get('authToken');
-        if (stored.authToken) {
-            api.setToken(stored.authToken);
+        // One-shot migration shim: if legacy 'authToken' exists but 'accessToken' does not, remove it to force re-login
+        const storedAuth = await browser.storage.local.get('authToken');
+        const storedJwt = await browser.storage.local.get(['accessToken', 'refreshToken']);
+        if (storedAuth.authToken && !storedJwt.accessToken) {
+            await browser.storage.local.remove('authToken');
+        }
+
+        if (storedJwt.accessToken && storedJwt.refreshToken) {
+            api.setTokens(storedJwt.accessToken, storedJwt.refreshToken);
             showLogoutButton();
             loadRecent();
         } else {
@@ -292,8 +298,23 @@ document.addEventListener('DOMContentLoaded', () => {
         logoutBtn.className = 'icon-btn'; 
 
         logoutBtn.addEventListener('click', async () => {
-            await browser.storage.local.remove('authToken');
-            api.setToken(null);
+            const stored = await browser.storage.local.get('refreshToken');
+            const rt = stored.refreshToken;
+            if (rt) {
+                // Best-effort logout hit to backend
+                try {
+                    const result = await browser.storage.local.get("apiUrl");
+                    const baseUrl = result.apiUrl || "http://localhost";
+                    await fetch(`${baseUrl}/auth/logout`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ refresh_token: rt })
+                    });
+                } catch (e) {
+                    console.error("Logout request to backend failed:", e);
+                }
+            }
+            await api.clearTokens();
             document.getElementById('logout-btn').remove();
             showLogin();
         });
@@ -340,8 +361,30 @@ document.addEventListener('DOMContentLoaded', () => {
                     const token = params.get("access_token");
 
                     if (token) {
-                        await browser.storage.local.set({ authToken: token });
-                        api.setToken(token);
+                        setSafeHTML(bookmarksList, '<li class="empty-state">Exchanging token with backend...</li>');
+                        const result = await browser.storage.local.get("apiUrl");
+                        const baseUrl = result.apiUrl || "http://localhost";
+                        
+                        const exchangeResponse = await fetch(`${baseUrl}/auth/google`, {
+                            method: "POST",
+                            headers: {
+                                "Content-Type": "application/json"
+                            },
+                            body: JSON.stringify({ google_access_token: token })
+                        });
+                        
+                        if (!exchangeResponse.ok) {
+                            const errorData = await exchangeResponse.json().catch(() => ({}));
+                            throw new Error(errorData.detail || "Backend authentication failed");
+                        }
+                        
+                        const data = await exchangeResponse.json();
+                        await browser.storage.local.set({
+                            accessToken: data.access_token,
+                            refreshToken: data.refresh_token
+                        });
+                        api.setTokens(data.access_token, data.refresh_token);
+                        
                         showLogoutButton();
                         setSafeHTML(bookmarksList, '<li class="empty-state">Logged in! Loading...</li>');
                         loadRecent();

@@ -13,19 +13,23 @@ document.addEventListener('DOMContentLoaded', () => {
     // --- Auth Initialization ---
     async function checkAuth() {
         if (!window.api) return;
-        const stored = await browser.storage.local.get('authToken');
-        if (stored.authToken) {
-            window.api.setToken(stored.authToken);
+        const stored = await browser.storage.local.get(['accessToken', 'refreshToken']);
+        if (stored.accessToken && stored.refreshToken) {
+            window.api.setTokens(stored.accessToken, stored.refreshToken);
         }
     }
 
     // Listen for login/logout events from popup
     browser.storage.onChanged.addListener((changes, area) => {
-        if (area === 'local' && changes.authToken) {
-            if (changes.authToken.newValue) {
-                window.api.setToken(changes.authToken.newValue);
-            } else {
-                window.api.setToken(null);
+        if (area === 'local') {
+            if (changes.accessToken || changes.refreshToken) {
+                browser.storage.local.get(['accessToken', 'refreshToken']).then(stored => {
+                    if (stored.accessToken && stored.refreshToken) {
+                        window.api.setTokens(stored.accessToken, stored.refreshToken);
+                    } else {
+                        window.api.setTokens(null, null);
+                    }
+                });
             }
         }
     });
