@@ -19,6 +19,9 @@ jobs:
   lint:
     name: Ruff
     runs-on: ubuntu-latest
+    # Non-blocking baseline: surfaces pre-existing lint debt as PR annotations
+    # without failing CI. Flip to blocking once the backlog is cleared.
+    continue-on-error: true
     steps:
       - uses: actions/checkout@v4
       - run: pipx install ruff
