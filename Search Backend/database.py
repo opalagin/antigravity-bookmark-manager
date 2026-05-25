@@ -1,7 +1,7 @@
 import os
-from sqlalchemy.ext.asyncio import create_async_engine
+from typing import AsyncGenerator
+from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker
 from sqlmodel.ext.asyncio.session import AsyncSession
-from sqlalchemy.orm import sessionmaker
 
 # Railway injects DATABASE_URL as a single connection string.
 # Local Docker Compose uses individual POSTGRES_* vars.
@@ -35,11 +35,11 @@ engine = create_async_engine(
 )
 
 
-AsyncSessionLocal = sessionmaker(
+AsyncSessionLocal = async_sessionmaker(
     engine, class_=AsyncSession, expire_on_commit=False
 )
 
 
-async def get_session() -> AsyncSession:
+async def get_session() -> AsyncGenerator[AsyncSession, None]:
     async with AsyncSessionLocal() as session:
         yield session
