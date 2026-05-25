@@ -46,7 +46,9 @@ class BookmarkEmbedding(SQLModel, table=True):
     bookmark_id: UUID = Field(foreign_key="bookmarks.id")
     chunk_index: int
     chunk_text: str
-    embedding: List[float] = Field(sa_column=Column(Vector(384))) # Dimension for all-MiniLM-L6-v2
+    embedding: List[float] = Field(
+        sa_column=Column(Vector(384))
+    )  # Dimension for all-MiniLM-L6-v2
     
     # Relationship
     bookmark: Optional[Bookmark] = Relationship(back_populates="embeddings")
@@ -81,7 +83,9 @@ class RefreshToken(SQLModel, table=True):
     created_at: Optional[datetime] = Field(
         sa_column=Column(TIMESTAMP(timezone=True), server_default=func.now())
     )
-    expires_at: datetime = Field(sa_column=Column(TIMESTAMP(timezone=True), nullable=False))
+    expires_at: datetime = Field(
+        sa_column=Column(TIMESTAMP(timezone=True), nullable=False)
+    )
     last_used_at: Optional[datetime] = Field(sa_column=Column(TIMESTAMP(timezone=True)))
     revoked_at: Optional[datetime] = Field(sa_column=Column(TIMESTAMP(timezone=True)))
     user_agent: Optional[str] = None
