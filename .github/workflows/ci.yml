@@ -24,9 +24,8 @@ jobs:
     continue-on-error: true
     steps:
       - uses: actions/checkout@v4
-      - run: pipx install ruff
-        working-directory: .
-      - run: ruff check --select E,F .
+      - uses: astral-sh/setup-uv@v4
+      - run: uvx ruff@0.15.14 check .
 
   typecheck:
     name: Pyright
