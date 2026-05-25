@@ -1,5 +1,5 @@
 from database import engine
-from models import AllowedUser, SQLModel
+from models import AllowedUser
 from sqlmodel.ext.asyncio.session import AsyncSession
 from sqlalchemy.orm import sessionmaker
 import asyncio

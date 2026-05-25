@@ -1,7 +1,6 @@
 import asyncio
 import os
 import sys
-from uuid import UUID
 
 # Ensure we can import from the backend directory
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
@@ -15,13 +14,10 @@ elif len(os.environ["JWT_SECRET"]) < 32:
 
 from unittest.mock import patch, MagicMock, AsyncMock
 from httpx import AsyncClient, ASGITransport
-from sqlmodel import select
 from sqlmodel.ext.asyncio.session import AsyncSession
 from sqlalchemy.orm import sessionmaker
 from database import engine
-from models import AllowedUser, RefreshToken, SQLModel
-import settings
-import auth
+from models import AllowedUser, SQLModel
 from main import app
 
 # Setup Async Session
@@ -47,7 +43,9 @@ async def run_tests_async():
     
     # 2. Async Client
     transport = ASGITransport(app=app)
-    async with app.router.lifespan_context(app), AsyncClient(transport=transport, base_url="http://test") as client:
+    async with app.router.lifespan_context(app), AsyncClient(
+        transport=transport, base_url="http://test"
+    ) as client:
         
         print("Starting Security Verification...")
         
@@ -62,7 +60,10 @@ async def run_tests_async():
             mock_resp.json.return_value = {"sub": "123", "email": "test@example.com"}
             
             # Request JWT session
-            auth_response = await client.post("/auth/google", json={"google_access_token": "google_token_123"})
+            auth_response = await client.post(
+                "/auth/google",
+                json={"google_access_token": "google_token_123"},
+            )
             print(f"Auth Response Code: {auth_response.status_code}")
             if auth_response.status_code != 200:
                 print(f"FAIL: Google exchange failed. {auth_response.text}")
@@ -94,17 +95,25 @@ async def run_tests_async():
             print("\n[Test] Disallowed User Authentication Check")
             mock_resp.json.return_value = {"sub": "456", "email": "bad@example.com"}
             
-            bad_auth_response = await client.post("/auth/google", json={"google_access_token": "google_token_456"})
+            bad_auth_response = await client.post(
+                "/auth/google",
+                json={"google_access_token": "google_token_456"},
+            )
             print(f"Bad Auth Response Code: {bad_auth_response.status_code}")
             if bad_auth_response.status_code == 403:
                  print("PASS: Disallowed user denied JWT session creation.")
             else:
-                 print(f"FAIL: Disallowed user granted JWT session creation. {bad_auth_response.text}")
-                 sys.exit(1)
+                  print(
+                      "FAIL: Disallowed user granted JWT session creation. "
+                      f"{bad_auth_response.text}"
+                  )
+                  sys.exit(1)
 
             # --- Scenario 3: Token Rotation ---
             print("\n[Test] Token Rotation")
-            rotate_response = await client.post("/auth/refresh", json={"refresh_token": refresh_token})
+            rotate_response = await client.post(
+                "/auth/refresh", json={"refresh_token": refresh_token}
+            )
             print(f"Rotate Response Code: {rotate_response.status_code}")
             if rotate_response.status_code == 200:
                 print("PASS: Token rotation succeeded.")
@@ -117,43 +126,62 @@ async def run_tests_async():
                 
             # Test Reuse Detection (Old refresh token should be revoked and fail)
             print("\n[Test] Refresh Token Reuse Detection")
-            reuse_response = await client.post("/auth/refresh", json={"refresh_token": refresh_token})
+            reuse_response = await client.post(
+                "/auth/refresh", json={"refresh_token": refresh_token}
+            )
             print(f"Reuse Response Code: {reuse_response.status_code}")
             if reuse_response.status_code == 401:
                 print("PASS: Reused refresh token rejected successfully.")
             else:
-                print(f"FAIL: Reused refresh token was NOT rejected. Status: {reuse_response.status_code}")
+                print(
+                    "FAIL: Reused refresh token was NOT rejected. "
+                    f"Status: {reuse_response.status_code}"
+                )
                 sys.exit(1)
 
             # --- Scenario 4: Token Revocation / Logout ---
             print("\n[Test] Token Revocation / Logout")
-            logout_response = await client.post("/auth/logout", json={"refresh_token": new_refresh_token})
+            logout_response = await client.post(
+                "/auth/logout", json={"refresh_token": new_refresh_token}
+            )
             print(f"Logout Response Code: {logout_response.status_code}")
             if logout_response.status_code == 204:
                 print("PASS: Logout request successfully executed.")
             else:
-                print(f"FAIL: Logout request failed. Status: {logout_response.status_code}")
+                print(
+                    "FAIL: Logout request failed. "
+                    f"Status: {logout_response.status_code}"
+                )
                 sys.exit(1)
                 
             # Try to refresh again after logout - should fail
-            refresh_after_logout = await client.post("/auth/refresh", json={"refresh_token": new_refresh_token})
+            refresh_after_logout = await client.post(
+                "/auth/refresh", json={"refresh_token": new_refresh_token}
+            )
             print(f"Refresh After Logout Code: {refresh_after_logout.status_code}")
             if refresh_after_logout.status_code == 401:
                 print("PASS: Refresh after logout was rejected successfully.")
             else:
-                print(f"FAIL: Refresh after logout succeeded! Status: {refresh_after_logout.status_code}")
+                print(
+                    "FAIL: Refresh after logout succeeded! "
+                    f"Status: {refresh_after_logout.status_code}"
+                )
                 sys.exit(1)
 
             # --- Scenario 5: Rate Limiting ---
             print("\n[Test] Rate Limiting (Flood /bookmarks)")
-            # Flood using the new rotated access token (we need to generate a new active session since we logged out the previous one)
-            # Or wait, new_access_token was already issued before logout. Logout only revokes the refresh token; the access token is stateless and technically valid until expiry (1800s). So we can reuse new_access_token to flood!
-            # Let's verify this!
+            # Flood using the new rotated access token (we need to generate a new
+            # active session since we logged out the previous one)
+            # Or wait, new_access_token was already issued before logout.
+            # Logout only revokes the refresh token; the access token is stateless
+            # and valid until expiry (1800s). So we reuse new_access_token.
             headers = {"Authorization": f"Bearer {new_access_token}"}
             triggered = False
             for i in range(15):
                 payload["url"] = f"http://example.com/flood/{i}"
-                response = await client.post("/bookmarks", json=payload, headers=headers)
+                response = await client.post(
+                    "/bookmarks", json=payload, headers=headers
+                )
                 if response.status_code == 429:
                     print(f"PASS: Rate limit triggered at request #{i+1} of flood.")
                     triggered = True
@@ -168,7 +196,7 @@ async def run_tests_async():
 if __name__ == "__main__":
     try:
         asyncio.run(run_tests_async())
-    except Exception as e:
+    except Exception:
         import traceback
         traceback.print_exc()
         sys.exit(1)
