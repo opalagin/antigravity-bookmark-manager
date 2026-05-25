@@ -1,5 +1,5 @@
-from typing import List, Protocol, Optional, Type
-from sqlmodel import select, delete, SQLModel
+from typing import List, Protocol, Optional, Type, Any
+from sqlmodel import select, delete, col
 from sqlalchemy import func, text
 from sqlmodel.ext.asyncio.session import AsyncSession
 from models import Bookmark, BookmarkEmbedding, BookmarkEmbeddingOpenAI
@@ -52,7 +52,7 @@ class EmbeddingProvider(Protocol):
     dimension: int         # vector size produced by this provider
     table_name: str        # pgvector table this provider's vectors live in
     threshold: float       # default cosine distance threshold for search
-    model_class: Type[SQLModel]
+    model_class: Type[Any]
 
     async def embed_documents(self, texts: List[str]) -> List[List[float]]: ...
     async def embed_query(self, text: str) -> List[float]: ...
@@ -80,7 +80,7 @@ class LocalEmbeddingProvider:
     
     async def embed_query(self, text: str) -> List[float]:
         def _query_embed_sync():
-            return next(self.model.query_embed(text, parallel=0)).tolist()
+            return next(iter(self.model.query_embed(text, parallel=0))).tolist()
         return await asyncio.to_thread(_query_embed_sync)
 
 class OpenAIEmbeddingProvider:
@@ -98,7 +98,7 @@ class OpenAIEmbeddingProvider:
         self.threshold = threshold
         self.model_class = BookmarkEmbeddingOpenAI
 
-    async def _embed_with_retry(self, func, *args, **kwargs):
+    async def _embed_with_retry(self, func, *args, **kwargs) -> Any:
         import random
         retries = 3
         delay = 1.0
@@ -218,6 +218,7 @@ def get_provider() -> EmbeddingProvider:
         f"table: {_provider_instance.table_name}, "
         f"threshold: {_provider_instance.threshold})"
     )
+    assert _provider_instance is not None
     return _provider_instance
 
 class LegacyEmbeddingServiceProxy:
@@ -261,7 +262,7 @@ class IngestionService:
             bookmark.tags = tags
             
             # Clear old embeddings to re-ingest
-            del_stmt = delete(model_cls).where(model_cls.bookmark_id == bookmark.id)
+            del_stmt = delete(model_cls).where(model_cls.bookmark_id == bookmark.id)  # type: ignore
             await session.execute(del_stmt)
         else:
             # Create New
@@ -502,22 +503,20 @@ Formatting requirements:
                     },
                 ]
             )
-            return response.choices[0].message.content, sources
+            content = response.choices[0].message.content or ""
+            return content, sources
         except Exception as e:
             return f"Error contacting OpenAI: {str(e)}", sources
 
     async def get_recent(self, session: AsyncSession, user_id: str, limit: int = 10):
         # Return list of Bookmarks
-        stmt = select(
-            Bookmark.id, Bookmark.url, Bookmark.title, Bookmark.tags,
-            Bookmark.created_at, Bookmark.updated_at
-        ).where(
+        stmt = select(Bookmark).where(
             Bookmark.user_id == user_id
         ).order_by(
-            Bookmark.created_at.desc()
+            col(Bookmark.created_at).desc()
         ).limit(limit)
         result = await session.execute(stmt)
-        return result.all()
+        return result.scalars().all()
 
 search_service = SearchService()
 
@@ -532,13 +531,10 @@ class ManagementService:
         user_id: str,
         skip: int = 0,
         limit: int = 50,
-        tag_prefix: str = None,
-        query: str = None,
+        tag_prefix: Optional[str] = None,
+        query: Optional[str] = None,
     ):
-        base = select(
-            Bookmark.id, Bookmark.url, Bookmark.title, Bookmark.tags,
-            Bookmark.created_at, Bookmark.updated_at
-        ).where(Bookmark.user_id == user_id)
+        base = select(Bookmark).where(Bookmark.user_id == user_id)
         
         if tag_prefix:
             if tag_prefix == "untagged":
@@ -556,8 +552,8 @@ class ManagementService:
             
         if query:
             base = base.where(
-                Bookmark.title.ilike(f"%{query}%")
-                | Bookmark.url.ilike(f"%{query}%")
+                col(Bookmark.title).ilike(f"%{query}%")
+                | col(Bookmark.url).ilike(f"%{query}%")
             )
             
         # Get total count
@@ -566,9 +562,9 @@ class ManagementService:
         total = total_result.scalar_one()
         
         # Get paginated results
-        stmt = base.order_by(Bookmark.created_at.desc()).offset(skip).limit(limit)
+        stmt = base.order_by(col(Bookmark.created_at).desc()).offset(skip).limit(limit)
         result = await session.execute(stmt)
-        bookmarks = result.all()
+        bookmarks = result.scalars().all()
         
         return bookmarks, total
 
@@ -589,8 +585,8 @@ class ManagementService:
         session: AsyncSession,
         user_id: str,
         bookmark_id: str,
-        title: str = None,
-        tags: List[str] = None,
+        title: Optional[str] = None,
+        tags: Optional[List[str]] = None,
     ):
         stmt = select(Bookmark).where(
             Bookmark.id == bookmark_id, Bookmark.user_id == user_id
@@ -656,7 +652,7 @@ class ManagementService:
             "cutoff": len(old_prefix) + 1,
         })
         await session.commit()
-        return exact.rowcount + nested.rowcount
+        return getattr(exact, "rowcount", 0) + getattr(nested, "rowcount", 0)
 
     async def bulk_delete(
         self, session: AsyncSession, user_id: str, bookmark_ids: List[str]
@@ -664,7 +660,7 @@ class ManagementService:
         # Resolve only bookmark IDs that are actually owned by this user to prevent
         # cross-tenant embedding deletion (P2 fix)
         owned_stmt = select(Bookmark.id).where(
-            Bookmark.user_id == user_id, Bookmark.id.in_(bookmark_ids)
+            Bookmark.user_id == user_id, col(Bookmark.id).in_(bookmark_ids)
         )
         owned_result = await session.execute(owned_stmt)
         owned_ids = [row[0] for row in owned_result.all()]
@@ -674,20 +670,22 @@ class ManagementService:
 
         # Delete embeddings scoped to confirmed owned bookmarks in both tables
         emb_stmt = delete(BookmarkEmbedding).where(
-            BookmarkEmbedding.bookmark_id.in_(owned_ids)
+            col(BookmarkEmbedding.bookmark_id).in_(owned_ids)
         )
         await session.execute(emb_stmt)
         emb_openai_stmt = delete(BookmarkEmbeddingOpenAI).where(
-            BookmarkEmbeddingOpenAI.bookmark_id.in_(owned_ids)
+            col(BookmarkEmbeddingOpenAI.bookmark_id).in_(owned_ids)
         )
         await session.execute(emb_openai_stmt)
 
         stmt = delete(Bookmark).where(
-            Bookmark.user_id == user_id, Bookmark.id.in_(owned_ids)
+            col(Bookmark.user_id) == user_id
+        ).where(
+            col(Bookmark.id).in_(owned_ids)  # type: ignore
         )
         result = await session.execute(stmt)
         await session.commit()
-        return result.rowcount
+        return getattr(result, "rowcount", 0)
 
     async def bulk_add_tag(
         self, session: AsyncSession, user_id: str, bookmark_ids: List[str], tag: str
@@ -698,7 +696,7 @@ class ManagementService:
             WHERE user_id = :uid AND id = ANY(:ids) AND NOT (:tag = ANY(tags))
         """), {"uid": user_id, "ids": bookmark_ids, "tag": tag})
         await session.commit()
-        return result.rowcount
+        return getattr(result, "rowcount", 0)
 
     async def bulk_remove_tag(
         self, session: AsyncSession, user_id: str, bookmark_ids: List[str], tag: str
@@ -709,7 +707,7 @@ class ManagementService:
             WHERE user_id = :uid AND id = ANY(:ids) AND :tag = ANY(tags)
         """), {"uid": user_id, "ids": bookmark_ids, "tag": tag})
         await session.commit()
-        return result.rowcount
+        return getattr(result, "rowcount", 0)
 
     async def reembed_user_bookmarks(self, user_id: str):
         self.reembed_jobs[user_id] = {
@@ -745,7 +743,7 @@ class ManagementService:
                         if chunks:
                             await session.execute(
                                 delete(model_cls).where(
-                                    model_cls.bookmark_id == b.id
+                                    model_cls.bookmark_id == b.id  # type: ignore
                                 )
                             )
                             embeddings = await provider.embed_documents(chunks)

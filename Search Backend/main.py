@@ -82,6 +82,7 @@ class SearchResult(BaseModel):
     url: str
     title: Optional[str]
     score: float  # Cosine distance — lower is closer
+    text: Optional[str] = None
 
 class ChatRequest(BaseModel):
     query: str
@@ -217,7 +218,7 @@ async def lifespan(app: FastAPI):
 limiter = Limiter(key_func=get_remote_address)
 app = FastAPI(title="Smart Bookmark Manager API", version="1.0.0", lifespan=lifespan)
 app.state.limiter = limiter
-app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)  # type: ignore
 
 
 # --- CORS Configuration ---

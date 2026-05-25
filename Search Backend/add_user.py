@@ -1,13 +1,12 @@
 from database import engine
 from models import AllowedUser
-from sqlmodel.ext.asyncio.session import AsyncSession
-from sqlalchemy.orm import sessionmaker
+from sqlalchemy.ext.asyncio import async_sessionmaker
 import asyncio
 import sys
 
 # Setup Async Session
-async_session_factory = sessionmaker(
-    engine, class_=AsyncSession, expire_on_commit=False
+async_session_factory = async_sessionmaker(
+    engine, expire_on_commit=False
 )
 
 async def add_user(email: str):

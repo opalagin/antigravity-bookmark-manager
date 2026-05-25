@@ -14,15 +14,14 @@ elif len(os.environ["JWT_SECRET"]) < 32:
 
 from unittest.mock import patch, MagicMock, AsyncMock
 from httpx import AsyncClient, ASGITransport
-from sqlmodel.ext.asyncio.session import AsyncSession
-from sqlalchemy.orm import sessionmaker
+from sqlalchemy.ext.asyncio import async_sessionmaker
 from database import engine
 from models import AllowedUser, SQLModel
 from main import app
 
 # Setup Async Session
-async_session_factory = sessionmaker(
-    engine, class_=AsyncSession, expire_on_commit=False
+async_session_factory = async_sessionmaker(
+    engine, expire_on_commit=False
 )
 
 async def reset_db():
