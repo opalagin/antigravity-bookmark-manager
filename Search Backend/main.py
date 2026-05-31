@@ -1,4 +1,6 @@
-from fastapi import FastAPI, HTTPException, Depends, Request, BackgroundTasks
+from fastapi import FastAPI, HTTPException, Depends, Request, BackgroundTasks, Response
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from slowapi import Limiter, _rate_limit_exceeded_handler
 from slowapi.util import get_remote_address
 from slowapi.errors import RateLimitExceeded
@@ -9,15 +11,15 @@ from pydantic import BaseModel
 from typing import List, Optional
 from datetime import datetime
 import uvicorn
+import httpx
 from contextlib import asynccontextmanager
 from sqlmodel.ext.asyncio.session import AsyncSession
-from fastapi import Response
 from uuid import UUID, uuid4
 from datetime import timedelta, timezone
 import jwt
 
 from database import get_session, engine
-from models import Bookmark, AllowedUser, RefreshToken, openai_dim
+from models import AllowedUser, RefreshToken, openai_dim
 import auth
 import settings
 
@@ -80,6 +82,7 @@ class SearchResult(BaseModel):
     url: str
     title: Optional[str]
     score: float  # Cosine distance — lower is closer
+    text: Optional[str] = None
 
 class ChatRequest(BaseModel):
     query: str
@@ -107,7 +110,9 @@ async def lifespan(app: FastAPI):
     # Fail-fast check for JWT secret in production
     if settings.ENVIRONMENT == "production":
         if not settings.JWT_SECRET or len(settings.JWT_SECRET) < 32:
-            raise ValueError("JWT_SECRET must be set and at least 32 bytes in production")
+            raise ValueError(
+                "JWT_SECRET must be set and at least 32 bytes in production"
+            )
 
     app.state.http = httpx.AsyncClient(timeout=10.0)
 
@@ -128,7 +133,12 @@ async def lifespan(app: FastAPI):
                 CONSTRAINT unique_user_url UNIQUE (user_id, url)
             )
         """))
-        await conn.execute(text("ALTER TABLE bookmarks ADD COLUMN IF NOT EXISTS updated_at TIMESTAMP WITH TIME ZONE"))
+        await conn.execute(
+            text(
+                "ALTER TABLE bookmarks ADD COLUMN IF NOT EXISTS "
+                "updated_at TIMESTAMP WITH TIME ZONE"
+            )
+        )
         await conn.execute(text(
             "CREATE INDEX IF NOT EXISTS idx_bookmarks_user_id ON bookmarks(user_id)"
         ))
@@ -194,19 +204,21 @@ async def lifespan(app: FastAPI):
                 "ON bookmark_embeddings_openai USING hnsw (embedding vector_cosine_ops)"
             ))
     except Exception as e:
-        print(f"Warning: Could not create HNSW index for OpenAI embeddings: {e}. Falling back to linear scan.")
+        print(
+            "Warning: Could not create HNSW index for OpenAI embeddings: "
+            f"{e}. Falling back to linear scan."
+        )
     yield
     # Shutdown
     await app.state.http.aclose()
     await engine.dispose()
 
 
-from fastapi.middleware.cors import CORSMiddleware
 
 limiter = Limiter(key_func=get_remote_address)
 app = FastAPI(title="Smart Bookmark Manager API", version="1.0.0", lifespan=lifespan)
 app.state.limiter = limiter
-app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)  # type: ignore
 
 
 # --- CORS Configuration ---
@@ -221,10 +233,10 @@ app.add_middleware(
 
 # --- Endpoints ---
 
-from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
+
+
 security = HTTPBearer()
 
-import httpx
 
 async def get_current_user(
     request: Request,
@@ -236,7 +248,10 @@ async def get_current_user(
     # Dev fallback preserved — mock tokens starting with "user_" still pass in dev
     if token.startswith("user_"):
         if settings.ENVIRONMENT == "production":
-            raise HTTPException(status_code=401, detail="Mock auth tokens are not permitted in production")
+            raise HTTPException(
+                status_code=401,
+                detail="Mock auth tokens are not permitted in production",
+            )
         return token
 
     try:
@@ -267,12 +282,22 @@ async def get_current_user(
                         if is_allowed:
                             return user_id
                         else:
-                            print(f"Fallback Denied: Email '{email}' is not in allowed list.")
-                            raise HTTPException(status_code=403, detail="Pilot Mode: Access restricted to allowed users only.")
+                            print(
+                                f"Fallback Denied: Email '{email}' "
+                                "is not in allowed list."
+                            )
+                            raise HTTPException(
+                                status_code=403,
+                                detail="Pilot Mode: Access restricted "
+                                "to allowed users only.",
+                            )
                     else:
                         print("Fallback Denied: Google response missing sub or email.")
                 else:
-                    print(f"Fallback Denied: Google userinfo endpoint returned status {response.status_code}")
+                    print(
+                        "Fallback Denied: Google userinfo endpoint "
+                        f"returned status {response.status_code}"
+                    )
             except HTTPException:
                 raise
             except Exception as ex:
@@ -301,7 +326,9 @@ async def auth_google(
     # Dev fallback for Google token
     if google_token.startswith("user_"):
         if settings.ENVIRONMENT == "production":
-            raise HTTPException(status_code=400, detail="Mock auth not allowed in production")
+            raise HTTPException(
+                status_code=400, detail="Mock auth not allowed in production"
+            )
         sub = google_token
         email = f"{google_token}@example.com"
     else:
@@ -312,25 +339,36 @@ async def auth_google(
                 headers={"Authorization": f"Bearer {google_token}"}
             )
             if response.status_code != 200:
-                raise HTTPException(status_code=401, detail="Invalid Google access token")
+                raise HTTPException(
+                    status_code=401, detail="Invalid Google access token"
+                )
         except Exception as e:
             if isinstance(e, HTTPException):
                 raise
-            raise HTTPException(status_code=401, detail=f"Failed to validate Google token: {e}")
+            raise HTTPException(
+                status_code=401,
+                detail=f"Failed to validate Google token: {e}",
+            )
             
         user_info = response.json()
         sub = user_info.get("sub")
         email = user_info.get("email")
         
         if not sub or not email:
-            raise HTTPException(status_code=400, detail="Missing user identity details from Google")
+            raise HTTPException(
+                status_code=400,
+                detail="Missing user identity details from Google",
+            )
         
     # 2. Pilot Mode Check
     stmt = select(AllowedUser).where(AllowedUser.email == email)
     result = await session.execute(stmt)
     is_allowed = result.scalar_one_or_none()
     if not is_allowed:
-        raise HTTPException(status_code=403, detail="Pilot Mode: Access restricted to allowed users only.")
+        raise HTTPException(
+            status_code=403,
+            detail="Pilot Mode: Access restricted to allowed users only.",
+        )
         
     # 3. Generate tokens
     jti = uuid4()
@@ -338,7 +376,9 @@ async def auth_google(
     refresh_token = auth.create_refresh_token(sub, email, str(jti))
     
     # 4. Save refresh token to database
-    expires_at = datetime.now(timezone.utc) + timedelta(seconds=settings.JWT_REFRESH_TTL_SECONDS)
+    expires_at = datetime.now(timezone.utc) + timedelta(
+        seconds=settings.JWT_REFRESH_TTL_SECONDS
+    )
     user_agent = request.headers.get("user-agent", "")[:255]
     
     db_token = RefreshToken(
@@ -389,27 +429,36 @@ async def auth_refresh(
     except ValueError:
         raise HTTPException(status_code=401, detail="Invalid JTI format")
         
-    # 2. Look up in the database (with row locking to serialize concurrent refresh calls)
+    # 2. Look up in the database (with row locking to serialize concurrent
+    # refresh calls)
     stmt = select(RefreshToken).where(RefreshToken.jti == jti_uuid).with_for_update()
     result = await session.execute(stmt)
     token_record = result.scalar_one_or_none()
     
     if not token_record:
-        raise HTTPException(status_code=401, detail="Refresh token not found or invalid")
+        raise HTTPException(
+            status_code=401, detail="Refresh token not found or invalid"
+        )
         
     # 3. Check revocation and expiration in DB
     now = datetime.now(timezone.utc)
     if token_record.revoked_at is not None:
         raise HTTPException(status_code=401, detail="Refresh token has been revoked")
     if token_record.expires_at < now:
-        raise HTTPException(status_code=401, detail="Refresh token has expired in database")
+        raise HTTPException(
+            status_code=401,
+            detail="Refresh token has expired in database",
+        )
         
     # 4. Verify user is still allowed (Pilot Mode)
     stmt_allowed = select(AllowedUser).where(AllowedUser.email == token_record.email)
     res_allowed = await session.execute(stmt_allowed)
     is_allowed = res_allowed.scalar_one_or_none()
     if not is_allowed:
-        raise HTTPException(status_code=403, detail="Pilot Mode: Access restricted to allowed users only.")
+        raise HTTPException(
+            status_code=403,
+            detail="Pilot Mode: Access restricted to allowed users only.",
+        )
         
     # 5. Rotate tokens (single transaction)
     token_record.revoked_at = now
@@ -417,8 +466,12 @@ async def auth_refresh(
     session.add(token_record)
     
     new_jti = uuid4()
-    new_access_token = auth.create_access_token(token_record.user_sub, token_record.email)
-    new_refresh_token = auth.create_refresh_token(token_record.user_sub, token_record.email, str(new_jti))
+    new_access_token = auth.create_access_token(
+        token_record.user_sub, token_record.email
+    )
+    new_refresh_token = auth.create_refresh_token(
+        token_record.user_sub, token_record.email, str(new_jti)
+    )
     
     new_expires_at = now + timedelta(seconds=settings.JWT_REFRESH_TTL_SECONDS)
     new_record = RefreshToken(
@@ -477,7 +530,12 @@ async def ingest_bookmark(
 ):
     try:
         bookmark = await ingestion_service.process_bookmark(
-            session, user_id, payload.url, payload.title, payload.content_markdown, payload.tags
+            session,
+            user_id,
+            payload.url,
+            payload.title,
+            payload.content_markdown,
+            payload.tags,
         )
         return BookmarkResponse(
             id=str(bookmark.id),
@@ -502,7 +560,9 @@ async def search_bookmarks(
 ):
     try:
         # returns list of (BookmarkEmbedding, Bookmark, distance) tuples
-        results = await search_service.search(session, user_id, payload.query, payload.limit)
+        results = await search_service.search(
+            session, user_id, payload.query, payload.limit
+        )
         
         response_list = []
         for embedding_entry, bookmark, distance in results:
@@ -579,7 +639,9 @@ async def get_bookmarks(
     user_id: str = Depends(get_current_user)
 ):
     try:
-        bookmarks, total = await management_service.get_bookmarks(session, user_id, skip, limit, tag_prefix, query)
+        bookmarks, total = await management_service.get_bookmarks(
+            session, user_id, skip, limit, tag_prefix, query
+        )
         items = [
             BookmarkResponse(
                 id=str(b.id),
@@ -591,7 +653,9 @@ async def get_bookmarks(
                 updated_at=b.updated_at
             ) for b in bookmarks
         ]
-        return PaginatedBookmarksResponse(items=items, total=total, skip=skip, limit=limit)
+        return PaginatedBookmarksResponse(
+            items=items, total=total, skip=skip, limit=limit
+        )
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -605,7 +669,9 @@ async def update_bookmark(
     user_id: str = Depends(get_current_user)
 ):
     try:
-        bookmark = await management_service.update_bookmark(session, user_id, bookmark_id, payload.title, payload.tags)
+        bookmark = await management_service.update_bookmark(
+            session, user_id, bookmark_id, payload.title, payload.tags
+        )
         if not bookmark:
             raise HTTPException(status_code=404, detail="Bookmark not found")
         return BookmarkResponse(
@@ -632,7 +698,9 @@ async def delete_bookmark(
     user_id: str = Depends(get_current_user)
 ):
     try:
-        success = await management_service.delete_bookmark(session, user_id, bookmark_id)
+        success = await management_service.delete_bookmark(
+            session, user_id, bookmark_id
+        )
         if not success:
             raise HTTPException(status_code=404, detail="Bookmark not found")
         return {"status": "deleted"}
@@ -650,7 +718,9 @@ async def bulk_update_tags(
     user_id: str = Depends(get_current_user)
 ):
     try:
-        count = await management_service.bulk_update_tags(session, user_id, payload.old_prefix, payload.new_prefix)
+        count = await management_service.bulk_update_tags(
+            session, user_id, payload.old_prefix, payload.new_prefix
+        )
         return BulkUpdateResponse(updated_count=count)
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
@@ -664,7 +734,9 @@ async def bulk_delete_bookmarks(
     user_id: str = Depends(get_current_user)
 ):
     try:
-        count = await management_service.bulk_delete(session, user_id, payload.bookmark_ids)
+        count = await management_service.bulk_delete(
+            session, user_id, payload.bookmark_ids
+        )
         return BulkDeleteResponse(deleted_count=count)
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
@@ -678,7 +750,9 @@ async def bulk_add_tag(
     user_id: str = Depends(get_current_user)
 ):
     try:
-        count = await management_service.bulk_add_tag(session, user_id, payload.bookmark_ids, payload.tag)
+        count = await management_service.bulk_add_tag(
+            session, user_id, payload.bookmark_ids, payload.tag
+        )
         return BulkUpdateResponse(updated_count=count)
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
@@ -692,7 +766,9 @@ async def bulk_remove_tag(
     user_id: str = Depends(get_current_user)
 ):
     try:
-        count = await management_service.bulk_remove_tag(session, user_id, payload.bookmark_ids, payload.tag)
+        count = await management_service.bulk_remove_tag(
+            session, user_id, payload.bookmark_ids, payload.tag
+        )
         return BulkUpdateResponse(updated_count=count)
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))

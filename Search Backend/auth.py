@@ -11,7 +11,11 @@ def create_access_token(sub: str, email: str) -> str:
         "sub": sub,
         "email": email,
         "iat": int(now.timestamp()),
-        "exp": int((now + timedelta(seconds=settings.JWT_ACCESS_TTL_SECONDS)).timestamp()),
+        "exp": int(
+            (
+                now + timedelta(seconds=settings.JWT_ACCESS_TTL_SECONDS)
+            ).timestamp()
+        ),
         "iss": settings.JWT_ISSUER,
         "aud": settings.JWT_AUDIENCE,
         "typ": "access"
@@ -28,7 +32,11 @@ def create_refresh_token(sub: str, email: str, jti: str) -> str:
         "email": email,
         "jti": jti,
         "iat": int(now.timestamp()),
-        "exp": int((now + timedelta(seconds=settings.JWT_REFRESH_TTL_SECONDS)).timestamp()),
+        "exp": int(
+            (
+                now + timedelta(seconds=settings.JWT_REFRESH_TTL_SECONDS)
+            ).timestamp()
+        ),
         "iss": settings.JWT_ISSUER,
         "aud": settings.JWT_AUDIENCE,
         "typ": "refresh"
@@ -51,7 +59,9 @@ def decode_token(token: str, typ: str = "access") -> dict:
             issuer=settings.JWT_ISSUER,
         )
         if payload.get("typ") != typ:
-            raise jwt.InvalidTokenError(f"Expected token type '{typ}', got '{payload.get('typ')}'")
+            raise jwt.InvalidTokenError(
+                f"Expected token type '{typ}', got '{payload.get('typ')}'"
+            )
         return payload
     except jwt.InvalidSignatureError as e:
         # 2. Key rotation support: try with previous secret if defined
@@ -65,7 +75,9 @@ def decode_token(token: str, typ: str = "access") -> dict:
                     issuer=settings.JWT_ISSUER,
                 )
                 if payload.get("typ") != typ:
-                    raise jwt.InvalidTokenError(f"Expected token type '{typ}', got '{payload.get('typ')}'")
+                    raise jwt.InvalidTokenError(
+                        f"Expected token type '{typ}', got '{payload.get('typ')}'"
+                    )
                 return payload
             except jwt.InvalidSignatureError:
                 pass

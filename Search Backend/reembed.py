@@ -1,8 +1,7 @@
 import asyncio
-from sqlmodel.ext.asyncio.session import AsyncSession
 from sqlmodel import select, delete
 from database import get_session
-from models import Bookmark, BookmarkEmbedding
+from models import Bookmark
 from services import get_provider, split_text
 
 async def reembed_all():
@@ -16,7 +15,10 @@ async def reembed_all():
         provider = get_provider()
         model_cls = provider.model_class
         
-        print(f"Found {len(bookmarks)} bookmarks for provider '{provider.name}'. Deleting old embeddings...")
+        print(
+            f"Found {len(bookmarks)} bookmarks for provider "
+            f"'{provider.name}'. Deleting old embeddings..."
+        )
         await session.execute(delete(model_cls))
         await session.commit()
         
