@@ -4,43 +4,50 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Smart Bookmark Manager</title>
+    <title>Smart Bookmarks</title>
+    <link rel="stylesheet" href="variables.css">
     <link rel="stylesheet" href="popup.css">
 </head>
 
 <body>
-    <div class="container">
-        <header style="position: relative; display: flex; justify-content: center; align-items: center; padding: 4px 0;">
-            <div class="settings-container">
-                <button id="settings-btn" class="icon-btn" title="Settings">⚙️</button>
+    <div class="popup">
+        <header class="top">
+            <div class="settings-wrapper">
+                <button id="settings-btn" class="icon-btn" title="Account Settings">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="4"/><path d="M4 21a8 8 0 0 1 16 0"/></svg>
+                </button>
                 <div id="settings-dropdown" class="dropdown-menu hidden">
                     <button id="reembed-btn" class="dropdown-item">Reembed your bookmarks...</button>
                 </div>
             </div>
-            <h1 style="margin: 0; font-size: 1.2rem; color: var(--primary-color);">Smart Bookmarks</h1>
-            <div id="logout-container" style="position: absolute; right: 0;"></div>
+            <div class="brand">Smart Bookmarks</div>
+            <div id="logout-container" class="logout-wrapper">
+                <!-- Log out button injected dynamically by popup.js -->
+            </div>
         </header>
 
-        <main>
-            <button id="save-btn" class="primary-btn">
-                <span class="icon">🔖</span> Save Current Page
-            </button>
+        <main class="popup-body">
+            <div class="save-row">
+                <button id="save-btn" class="btn save-btn">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"/></svg>
+                    <span>Save Current Page</span>
+                </button>
+                <button id="manage-btn" class="btn ghost mng-btn" title="Manage Library">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/></svg>
+                </button>
+            </div>
 
-            <div class="search-container" style="margin-top: 12px;">
-                <input type="text" id="search-input" placeholder="Ask your bookmarks...">
+            <div class="search-container">
+                <input type="text" id="search-input" class="field" placeholder="Ask your bookmarks..." />
             </div>
 
             <section class="recent-bookmarks">
-                <h2>Recent</h2>
-                <ul id="bookmarks-list">
+                <div class="recent-head">Recent</div>
+                <ul id="bookmarks-list" class="recent-list">
                     <!-- Javascript will populate this -->
                     <li class="empty-state">Loading...</li>
                 </ul>
             </section>
-            
-            <button id="manage-btn" class="secondary-btn" style="margin-top: 15px; width: 100%; padding: 8px; font-weight: bold; cursor: pointer; border-radius: 6px; border: 1px solid #ddd; background: #f8f9fa;">
-                <span class="icon">📚</span> Manage Library
-            </button>
         </main>
     </div>
     <script src="api.js"></script>

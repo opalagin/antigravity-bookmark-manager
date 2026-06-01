@@ -10,6 +10,18 @@ document.addEventListener('DOMContentLoaded', () => {
         sendBtn.disabled = !this.value.trim();
     });
 
+    // Close Sidebar Handler
+    const closeBtn = document.getElementById('close-sidebar-btn');
+    if (closeBtn) {
+        closeBtn.addEventListener('click', () => {
+            if (typeof browser !== 'undefined' && browser.sidebarAction && browser.sidebarAction.close) {
+                browser.sidebarAction.close();
+            } else {
+                window.close();
+            }
+        });
+    }
+
     // --- Auth Initialization ---
     async function checkAuth() {
         if (!window.api) return;
@@ -57,7 +69,7 @@ document.addEventListener('DOMContentLoaded', () => {
             const response = await window.api.chat(text);
 
             // 4. Update AI Message
-            updateMessage(loadingId, response.answer);
+            updateMessage(loadingId, response.answer, response.sources);
 
         } catch (error) {
             console.error(error);
@@ -97,7 +109,7 @@ document.addEventListener('DOMContentLoaded', () => {
         return msgDiv; // Return element for updates
     }
 
-    function updateMessage(element, newText) {
+    function updateMessage(element, newText, sources = []) {
         element.classList.remove('loading');
         const contentDiv = element.querySelector('.content');
 
@@ -135,6 +147,21 @@ document.addEventListener('DOMContentLoaded', () => {
             }
         } else {
             contentDiv.textContent = newText;
+        }
+
+        // Render Citations / Reference chips if available
+        if (sources && sources.length > 0) {
+            const citeContainer = document.createElement('div');
+            citeContainer.className = 'cite-container';
+            
+            sources.forEach(source => {
+                const tagSpan = document.createElement('span');
+                tagSpan.className = 'tag';
+                tagSpan.textContent = source;
+                citeContainer.appendChild(tagSpan);
+            });
+            
+            contentDiv.appendChild(citeContainer);
         }
 
         history.scrollTop = history.scrollHeight;

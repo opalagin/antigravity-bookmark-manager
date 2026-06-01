@@ -1,0 +1,155 @@
+:root {
+    /* surfaces (mid-slate default) */
+    --page-canvas: #14171c;
+    --bg: #1e2228;
+    --surface: #2a2f37;
+    --surface-2: #323843;
+    --surface-3: #3a414c;
+    --border: rgba(255, 255, 255, 0.07);
+    --border-strong: rgba(255, 255, 255, 0.12);
+
+    /* text */
+    --text: #e8eaef;
+    --text-2: #a3acba;
+    --text-3: #727b8a;
+
+    /* accent — locked: brighter violet #7c6ff0 */
+    --accent: #7c6ff0;
+    --accent-hover: #9489f3;
+    --accent-soft: rgba(124, 111, 240, 0.16);
+    --accent-line: rgba(124, 111, 240, 0.38);
+    --danger: #df6360;
+    --danger-soft: rgba(223, 99, 96, 0.16);
+
+    /* shape + rhythm */
+    --radius: 10px;
+    --radius-sm: 7px;
+    --row-pad: 8px 14px;
+    --recent-gap: 7px;
+
+    /* typography */
+    --font: -apple-system, BlinkMacSystemFont, "Helvetica Neue", Helvetica, "Segoe UI", Arial, system-ui, sans-serif;
+    --mono: "SF Mono", ui-monospace, "Roboto Mono", Menlo, Consolas, monospace;
+}
+
+/* ===== Shared UI Components ===== */
+
+.btn {
+    font-family: inherit;
+    border: 0;
+    cursor: pointer;
+    border-radius: var(--radius);
+    font-weight: 650;
+    font-size: 14px;
+    color: #fff;
+    background: linear-gradient(180deg, var(--accent-hover), var(--accent));
+    box-shadow: 0 1px 0 rgba(255, 255, 255, 0.18) inset, 0 6px 16px -8px var(--accent);
+    transition: filter 0.15s, transform 0.05s, background 0.2s, box-shadow 0.2s;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+}
+
+.btn:hover:not(:disabled) {
+    filter: brightness(1.06);
+}
+
+.btn:active:not(:disabled) {
+    transform: translateY(1px);
+}
+
+.btn:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+}
+
+.btn.ghost {
+    background: var(--surface-2);
+    color: var(--text);
+    box-shadow: none;
+    border: 1px solid var(--border-strong);
+    font-weight: 600;
+}
+
+.btn.ghost:hover:not(:disabled) {
+    background: var(--surface-3);
+}
+
+.btn.danger {
+    background: linear-gradient(180deg, #e8716e, var(--danger));
+    box-shadow: 0 1px 0 rgba(255, 255, 255, 0.18) inset, 0 6px 16px -8px var(--danger);
+}
+
+/* Runtime JS Feedback Classes (Success / Error states) */
+.btn.btn-success {
+    background: linear-gradient(180deg, #2ecc71, #27ae60) !important;
+    box-shadow: 0 1px 0 rgba(255, 255, 255, 0.18) inset, 0 6px 16px -8px #27ae60 !important;
+}
+
+.btn.btn-error {
+    background: linear-gradient(180deg, #e74c3c, #c0392b) !important;
+    box-shadow: 0 1px 0 rgba(255, 255, 255, 0.18) inset, 0 6px 16px -8px #c0392b !important;
+}
+
+.field {
+    width: 100%;
+    background: var(--surface-2);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    color: var(--text);
+    font-family: inherit;
+    font-size: 14px;
+    padding: 11px 13px;
+    outline: none;
+    transition: border-color 0.15s, box-shadow 0.15s;
+    box-sizing: border-box;
+}
+
+.field::placeholder {
+    color: var(--text-3);
+}
+
+.field:focus {
+    border-color: var(--accent-line);
+    box-shadow: 0 0 0 3px var(--accent-soft);
+}
+
+.field.readonly {
+    color: var(--text-3);
+    cursor: default;
+}
+
+.tag {
+    display: inline-flex;
+    align-items: center;
+    height: 22px;
+    padding: 0 9px;
+    border-radius: 999px;
+    font-size: 12px;
+    font-weight: 600;
+    background: var(--accent-soft);
+    color: var(--accent-hover);
+    border: 1px solid var(--accent-line);
+    white-space: nowrap;
+}
+
+.icon-btn {
+    width: 34px;
+    height: 34px;
+    border-radius: 9px;
+    background: var(--surface-2);
+    border: 1px solid var(--border);
+    display: grid;
+    place-items: center;
+    color: var(--text-2);
+    cursor: pointer;
+    transition: background 0.15s, color 0.15s;
+    outline: none;
+    box-sizing: border-box;
+}
+
+.icon-btn:hover {
+    background: var(--surface-3);
+    color: var(--text);
+}
