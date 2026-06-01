@@ -1,0 +1,368 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Smart Bookmarks — Unified Design</title>
+<style>
+  :root{
+    /* surfaces (mid-slate default — matches the existing popup) */
+    --bg:#1e2228;
+    --surface:#2a2f37;
+    --surface-2:#323843;
+    --surface-3:#3a414c;
+    --border:rgba(255,255,255,0.07);
+    --border-strong:rgba(255,255,255,0.12);
+
+    /* text */
+    --text:#e8eaef;
+    --text-2:#a3acba;
+    --text-3:#727b8a;
+
+    /* accent — locked: brighter violet #7c6ff0 */
+    --accent:#7c6ff0;
+    --accent-hover:#9489f3;
+    --accent-soft:rgba(124,111,240,0.16);
+    --accent-line:rgba(124,111,240,0.38);
+    --danger:#df6360;
+    --danger-soft:rgba(223,99,96,0.16);
+
+    /* shape + rhythm */
+    --radius:10px;
+    --radius-sm:7px;
+    --row-pad:8px 14px;
+    --recent-gap:7px;
+
+    --font:-apple-system,BlinkMacSystemFont,"Helvetica Neue",Helvetica,"Segoe UI",Arial,system-ui,sans-serif;
+    --mono:"SF Mono",ui-monospace,"Roboto Mono",Menlo,Consolas,monospace;
+  }
+
+  *{box-sizing:border-box;}
+  html,body{margin:0;}
+  body{
+    background:
+      radial-gradient(1200px 600px at 18% -8%, rgba(126,110,240,0.10), transparent 60%),
+      #14171c;
+    color:var(--text);
+    font-family:var(--font);
+    -webkit-font-smoothing:antialiased;
+    line-height:1.45;
+    padding:40px 36px 120px;
+  }
+
+  /* ---------- page scaffolding ---------- */
+  .page-head{max-width:1280px;margin:0 auto 30px;}
+  .page-head .eyebrow{font-size:12px;letter-spacing:.16em;text-transform:uppercase;color:var(--accent-hover);font-weight:600;}
+  .page-head h1{font-size:30px;font-weight:700;margin:8px 0 6px;letter-spacing:-0.02em;}
+  .page-head p{margin:0;color:var(--text-2);font-size:15px;max-width:680px;}
+
+  /* tokens strip */
+  .tokens{max-width:1280px;margin:0 auto 38px;display:flex;flex-wrap:wrap;gap:14px;}
+  .token-card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:14px 16px;}
+  .token-card h4{margin:0 0 10px;font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:var(--text-3);font-weight:600;}
+  .swatches{display:flex;gap:8px;}
+  .sw{width:34px;height:34px;border-radius:8px;border:1px solid var(--border-strong);}
+  .sw span{display:block;font-size:9px;color:var(--text-3);margin-top:38px;text-align:center;white-space:nowrap;}
+  .type-row{display:flex;align-items:baseline;gap:14px;}
+  .type-row b{font-weight:700;font-size:20px;letter-spacing:-.01em;}
+  .type-row .t2{color:var(--text-2);font-size:14px;}
+  .type-row .t3{color:var(--text-3);font-family:var(--mono);font-size:12px;}
+
+  /* section labels */
+  .surfaces{max-width:1280px;margin:0 auto;}
+  .surf-label{display:flex;align-items:center;gap:12px;margin:34px 0 16px;}
+  .surf-label .n{width:26px;height:26px;border-radius:7px;background:var(--accent-soft);color:var(--accent-hover);display:grid;place-items:center;font-size:13px;font-weight:700;border:1px solid var(--accent-line);}
+  .surf-label h2{font-size:17px;font-weight:650;margin:0;letter-spacing:-.01em;}
+  .surf-label .desc{color:var(--text-3);font-size:13px;}
+
+  .row-2{display:flex;gap:26px;flex-wrap:wrap;align-items:flex-start;}
+
+  /* device frame */
+  .frame{background:var(--surface);border:1px solid var(--border);border-radius:16px;overflow:hidden;box-shadow:0 24px 60px -28px rgba(0,0,0,0.7),0 2px 0 rgba(255,255,255,0.02) inset;}
+
+  /* ===== shared component styles ===== */
+  .btn{font-family:inherit;border:0;cursor:pointer;border-radius:var(--radius);font-weight:650;font-size:14px;color:#fff;
+    background:linear-gradient(180deg,var(--accent-hover),var(--accent));
+    box-shadow:0 1px 0 rgba(255,255,255,0.18) inset,0 6px 16px -8px var(--accent);
+    transition:filter .15s,transform .05s;}
+  .btn:hover{filter:brightness(1.06);}
+  .btn:active{transform:translateY(1px);}
+  .btn.ghost{background:var(--surface-2);color:var(--text);box-shadow:none;border:1px solid var(--border-strong);font-weight:600;}
+  .btn.danger{background:linear-gradient(180deg,#e8716e,var(--danger));box-shadow:0 1px 0 rgba(255,255,255,0.18) inset,0 6px 16px -8px var(--danger);}
+  .field{width:100%;background:var(--surface-2);border:1px solid var(--border);border-radius:var(--radius);color:var(--text);
+    font-family:inherit;font-size:14px;padding:11px 13px;outline:none;transition:border-color .15s,box-shadow .15s;}
+  .field::placeholder{color:var(--text-3);}
+  .field:focus{border-color:var(--accent-line);box-shadow:0 0 0 3px var(--accent-soft);}
+  .tag{display:inline-flex;align-items:center;height:22px;padding:0 9px;border-radius:999px;font-size:12px;font-weight:600;
+    background:var(--accent-soft);color:var(--accent-hover);border:1px solid var(--accent-line);white-space:nowrap;}
+
+  /* ---------------- POPUP ---------------- */
+  .popup{width:360px;}
+  .popup .top{display:flex;align-items:center;gap:12px;padding:16px 16px 4px;}
+  .icon-btn{width:34px;height:34px;border-radius:9px;background:var(--surface-2);border:1px solid var(--border);display:grid;place-items:center;color:var(--text-2);cursor:pointer;transition:background .15s,color .15s;}
+  .icon-btn:hover{background:var(--surface-3);color:var(--text);}
+  .popup .brand{flex:1;font-size:18px;font-weight:700;color:var(--accent-hover);letter-spacing:-.01em;}
+  .popup-body{padding:14px 16px 18px;}
+  .save-row{display:flex;gap:9px;margin-bottom:12px;}
+  .save-btn{flex:1;padding:13px;display:flex;align-items:center;justify-content:center;gap:9px;font-size:15px;}
+  .mng-btn{flex:none;width:48px;border-radius:var(--radius);display:grid;place-items:center;}
+  .recent-head{font-size:11px;letter-spacing:.16em;text-transform:uppercase;color:var(--text-3);font-weight:600;margin:16px 2px 9px;}
+  .recent-list{display:flex;flex-direction:column;gap:var(--recent-gap);}
+  .recent-item{background:var(--surface-2);border:1px solid var(--border);border-radius:var(--radius-sm);padding:var(--row-pad);font-size:14px;color:var(--text);
+    cursor:pointer;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;transition:background .12s,border-color .12s;display:flex;align-items:center;gap:10px;}
+  .recent-item:hover{background:var(--surface-3);border-color:var(--border-strong);}
+  .recent-item .fav{width:7px;height:7px;border-radius:2px;background:var(--accent-line);flex:none;}
+
+  /* ---------------- CHAT ---------------- */
+  .chat{width:360px;display:flex;flex-direction:column;height:620px;}
+  .chat .bar{display:flex;align-items:center;justify-content:space-between;padding:14px 16px;background:var(--surface-2);border-bottom:1px solid var(--border);}
+  .chat .bar b{font-size:15px;font-weight:700;}
+  .chat .bar .x{color:var(--text-3);cursor:pointer;font-size:18px;line-height:1;}
+  .chat .sub{padding:13px 16px;border-bottom:1px solid var(--border);font-size:15px;font-weight:650;display:flex;align-items:center;gap:7px;}
+  .chat .stream{flex:1;overflow:hidden;padding:16px;display:flex;flex-direction:column;gap:12px;background:linear-gradient(180deg,var(--surface),var(--bg));}
+  .bubble{max-width:80%;padding:11px 14px;font-size:14px;border-radius:14px;line-height:1.5;}
+  .bubble.bot{align-self:flex-start;background:var(--surface-2);border:1px solid var(--border);color:var(--text);border-bottom-left-radius:5px;}
+  .bubble.me{align-self:flex-end;background:linear-gradient(180deg,var(--accent-hover),var(--accent));color:#fff;border-bottom-right-radius:5px;box-shadow:0 6px 16px -8px var(--accent);}
+  .bubble .cite{margin-top:9px;display:flex;gap:6px;flex-wrap:wrap;}
+  .chat .compose{padding:12px;border-top:1px solid var(--border);display:flex;gap:9px;align-items:center;background:var(--surface-2);}
+  .send{width:40px;height:40px;flex:none;border-radius:10px;border:0;cursor:pointer;display:grid;place-items:center;color:#fff;
+    background:linear-gradient(180deg,var(--accent-hover),var(--accent));box-shadow:0 6px 16px -8px var(--accent);}
+
+  /* ---------------- MANAGER ---------------- */
+  .manager{width:100%;}
+  .mgr-head{padding:18px 24px;background:linear-gradient(100deg,var(--surface-2),var(--surface));border-bottom:1px solid var(--border);
+    display:flex;align-items:center;gap:12px;position:relative;}
+  .mgr-head::after{content:"";position:absolute;left:0;right:0;bottom:-1px;height:2px;background:linear-gradient(90deg,var(--accent),transparent 55%);}
+  .mgr-head .logo{width:30px;height:30px;border-radius:8px;background:var(--accent-soft);border:1px solid var(--accent-line);display:grid;place-items:center;color:var(--accent-hover);font-size:15px;}
+  .mgr-head h2{font-size:18px;font-weight:700;margin:0;letter-spacing:-.01em;}
+  .mgr-grid{display:grid;grid-template-columns:228px 1fr 300px;min-height:560px;}
+  .col{padding:18px;}
+  .col.tags{border-right:1px solid var(--border);}
+  .col.main{border-right:1px solid var(--border);padding:18px 18px 0;}
+  .col-title{font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:var(--text-3);font-weight:600;margin:0 0 14px;}
+
+  .tag-nav{display:flex;flex-direction:column;gap:2px;}
+  .tag-nav a{display:flex;align-items:center;gap:10px;padding:8px 10px;border-radius:8px;color:var(--text-2);font-size:14px;text-decoration:none;cursor:pointer;transition:background .12s,color .12s;}
+  .tag-nav a .dot{width:8px;height:8px;border-radius:3px;background:var(--text-3);flex:none;}
+  .tag-nav a .ct{margin-left:auto;font-size:12px;color:var(--text-3);background:var(--surface-2);border-radius:999px;padding:1px 8px;min-width:22px;text-align:center;}
+  .tag-nav a:hover{background:var(--surface-2);color:var(--text);}
+  .tag-nav a.active{background:var(--accent-soft);color:var(--accent-hover);font-weight:600;}
+  .tag-nav a.active .dot{background:var(--accent-hover);}
+  .tag-nav a.active .ct{background:rgba(126,110,240,0.22);color:var(--accent-hover);}
+
+  .main-top{display:flex;align-items:center;justify-content:space-between;gap:16px;margin-bottom:14px;}
+  .main-top h3{font-size:20px;font-weight:700;margin:0;letter-spacing:-.01em;}
+  .main-top .field{max-width:280px;}
+
+  .table{width:100%;border-collapse:collapse;font-size:14px;}
+  .table th{text-align:left;color:var(--text-3);font-size:11px;letter-spacing:.1em;text-transform:uppercase;font-weight:600;padding:0 12px 10px;border-bottom:1px solid var(--border);}
+  .table td{padding:var(--row-pad);border-bottom:1px solid var(--border);color:var(--text-2);vertical-align:middle;}
+  .table tbody tr{cursor:pointer;transition:background .1s;}
+  .table tbody tr:hover{background:var(--surface-2);}
+  .table tbody tr.sel{background:var(--accent-soft);box-shadow:inset 2px 0 0 var(--accent-hover);}
+  .table td.title{color:var(--text);font-weight:600;max-width:0;width:34%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+  .table td.url a{color:var(--accent-hover);text-decoration:none;font-size:13px;display:inline-block;max-width:220px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;vertical-align:bottom;}
+  .table td.url a:hover{text-decoration:underline;}
+  .table td.date{color:var(--text-3);font-size:13px;white-space:nowrap;font-variant-numeric:tabular-nums;}
+  .table td.tags{white-space:nowrap;}
+  .table td.tags .tag{margin-right:5px;}
+  .cb{width:16px;height:16px;border-radius:5px;border:1.5px solid var(--border-strong);background:var(--surface-2);display:inline-block;}
+
+  .detail .label{font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:var(--text-3);font-weight:600;margin:18px 0 7px;}
+  .detail .label:first-of-type{margin-top:0;}
+  .detail .open-link{color:var(--accent-hover);font-size:13px;text-decoration:none;display:inline-block;margin-top:7px;}
+  .detail .open-link:hover{text-decoration:underline;}
+  .detail .preview{background:var(--surface-2);border:1px solid var(--border);border-radius:var(--radius-sm);padding:11px 13px;color:var(--text-3);font-size:13px;font-style:italic;}
+  .detail .actions{display:flex;gap:10px;margin-top:22px;}
+  .detail .actions .btn{padding:11px 18px;flex:1;}
+  .detail .actions .btn.danger{flex:0 0 auto;}
+  .field.readonly{color:var(--text-3);}
+
+  .foot{max-width:1280px;margin:46px auto 0;color:var(--text-3);font-size:13px;border-top:1px solid var(--border);padding-top:18px;}
+</style>
+</head>
+<body>
+  <header class="page-head">
+    <div class="eyebrow">Browser Extension · Design System</div>
+    <h1>Smart Bookmarks — one consistent look</h1>
+    <p>A single mid-slate theme with a refined violet accent, applied across all three surfaces. Tightened rows, neutral system type, and one quiet tinted tag style. Open <b>Tweaks</b> to retune accent, darkness, density, and corner radius live.</p>
+  </header>
+
+  <!-- TOKENS -->
+  <section class="tokens">
+    <div class="token-card">
+      <h4>Surfaces</h4>
+      <div class="swatches">
+        <div class="sw" style="background:#14171c"><span>canvas</span></div>
+        <div class="sw" style="background:var(--bg)"><span>base</span></div>
+        <div class="sw" style="background:var(--surface)"><span>surface</span></div>
+        <div class="sw" style="background:var(--surface-2)"><span>raised</span></div>
+      </div>
+    </div>
+    <div class="token-card">
+      <h4>Accent</h4>
+      <div class="swatches">
+        <div class="sw" style="background:var(--accent)"><span>accent</span></div>
+        <div class="sw" style="background:var(--accent-hover)"><span>hover</span></div>
+        <div class="sw" style="background:var(--accent-soft)"><span>tint</span></div>
+        <div class="sw" style="background:var(--danger)"><span>danger</span></div>
+      </div>
+    </div>
+    <div class="token-card" style="flex:1;min-width:280px;">
+      <h4>Type · system sans</h4>
+      <div class="type-row">
+        <b>Smart Bookmarks</b>
+        <span class="t2">Body / list text 14px</span>
+        <span class="t3">docs.claude-mem.ai</span>
+      </div>
+    </div>
+  </section>
+
+  <div class="surfaces">
+
+    <!-- ====== POPUP + CHAT ====== -->
+    <div class="surf-label"><span class="n">1</span><h2>Toolbar Popup</h2><span class="desc">— quick capture + search, 360px</span></div>
+    <div class="row-2">
+
+      <div class="frame popup">
+        <div class="top">
+          <div class="icon-btn" title="Account">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="4"/><path d="M4 21a8 8 0 0 1 16 0"/></svg>
+          </div>
+          <div class="brand">Smart Bookmarks</div>
+          <div class="icon-btn" title="Log out">
+            <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><path d="M16 17l5-5-5-5"/><path d="M21 12H9"/></svg>
+          </div>
+        </div>
+        <div class="popup-body">
+          <div class="save-row">
+            <button class="btn save-btn">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"/></svg>
+              Save Current Page
+            </button>
+            <button class="btn ghost mng-btn" title="Manage Library">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/></svg>
+            </button>
+          </div>
+          <input class="field" placeholder="Ask your bookmarks…" />
+          <div class="recent-head">Recent</div>
+          <div class="recent-list">
+            <div class="recent-item"><span class="fav"></span>Ideas — Noah Zender</div>
+            <div class="recent-item"><span class="fav"></span>Getting started with uv</div>
+            <div class="recent-item"><span class="fav"></span>How do I run two isolated instances of fi…</div>
+            <div class="recent-item"><span class="fav"></span>Installation - Claude-Mem</div>
+            <div class="recent-item"><span class="fav"></span>abis330/bge-small-en-v1.5: bge-small-e…</div>
+            <div class="recent-item"><span class="fav"></span>bge-small-en-v1.5 (BAAI) · Cloudflare AI…</div>
+            <div class="recent-item"><span class="fav"></span>7 Essential Techniques for Apache Spark…</div>
+            <div class="recent-item"><span class="fav"></span>How I Cracked the Amazon Data Engine…</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- CHAT -->
+      <div style="display:flex;flex-direction:column;gap:0;">
+        <div class="surf-label" style="margin-top:0;"><span class="n">2</span><h2>Sidebar Chat</h2><span class="desc">— ask across saved pages</span></div>
+        <div class="frame chat">
+          <div class="bar"><b>Smart Bookmarks</b><span class="x">✕</span></div>
+          <div class="sub">Chat
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--accent-hover)" stroke-width="2"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+          </div>
+          <div class="stream">
+            <div class="bubble bot">Hello! Ask me anything about your saved bookmarks.</div>
+            <div class="bubble me">Hi!</div>
+            <div class="bubble bot">I couldn't find any relevant bookmarks to answer your question.</div>
+            <div class="bubble bot">Here's what I found on Claude-Mem setup:
+              <div class="cite"><span class="tag">Installation - Claude-Mem</span><span class="tag">AI</span></div>
+            </div>
+          </div>
+          <div class="compose">
+            <input class="field" placeholder="Ask a question…" />
+            <button class="send" title="Send">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 2 11 13"/><path d="M22 2 15 22l-4-9-9-4z"/></svg>
+            </button>
+          </div>
+        </div>
+      </div>
+
+    </div>
+
+    <!-- ====== MANAGER ====== -->
+    <div class="surf-label"><span class="n">3</span><h2>Full-page Library Manager</h2><span class="desc">— browse, filter, edit</span></div>
+    <div class="frame manager">
+      <div class="mgr-head">
+        <div class="logo">
+          <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/></svg>
+        </div>
+        <h2>Smart Bookmark Manager</h2>
+      </div>
+      <div class="mgr-grid">
+
+        <!-- tags -->
+        <div class="col tags">
+          <div class="col-title">Tags</div>
+          <nav class="tag-nav">
+            <a class="active"><span class="dot"></span>All Bookmarks</a>
+            <a><span class="dot"></span>Untagged</a>
+            <a><span class="dot"></span>AI<span class="ct">3</span></a>
+            <a><span class="dot"></span>Claude<span class="ct">2</span></a>
+            <a><span class="dot"></span>Cloud<span class="ct">1</span></a>
+            <a><span class="dot"></span>Deployment<span class="ct">1</span></a>
+            <a><span class="dot"></span>Firefox<span class="ct">1</span></a>
+            <a><span class="dot"></span>ML<span class="ct">1</span></a>
+            <a><span class="dot"></span>Tools<span class="ct">1</span></a>
+          </nav>
+        </div>
+
+        <!-- table -->
+        <div class="col main">
+          <div class="main-top">
+            <h3>All Bookmarks</h3>
+            <input class="field" placeholder="Search title or URL…" />
+          </div>
+          <table class="table">
+            <thead>
+              <tr><th style="width:18px;"><span class="cb"></span></th><th>Title</th><th>URL</th><th>Tags</th><th>Date</th></tr>
+            </thead>
+            <tbody>
+              <tr><td><span class="cb"></span></td><td class="title">Ideas — Noah Zender</td><td class="url"><a>noahzender.com/ideas</a></td><td class="tags"></td><td class="date">5/22/2026</td></tr>
+              <tr><td><span class="cb"></span></td><td class="title">Getting started with uv</td><td class="url"><a>pydevtools.com/handbook/tutorial</a></td><td class="tags"></td><td class="date">5/21/2026</td></tr>
+              <tr><td><span class="cb"></span></td><td class="title">How do I run two isolated instances …</td><td class="url"><a>stackoverflow.com/questions/613917</a></td><td class="tags"><span class="tag">Firefox</span></td><td class="date">5/17/2026</td></tr>
+              <tr class="sel"><td><span class="cb"></span></td><td class="title">Installation - Claude-Mem</td><td class="url"><a>docs.claude-mem.ai/installation</a></td><td class="tags"><span class="tag">AI</span><span class="tag">Claude</span></td><td class="date">5/17/2026</td></tr>
+              <tr><td><span class="cb"></span></td><td class="title">abis330/bge-small-en-v1.5</td><td class="url"><a>github.com/abis330/bge-small-en-v1</a></td><td class="tags"><span class="tag">AI</span><span class="tag">ML</span></td><td class="date">5/17/2026</td></tr>
+              <tr><td><span class="cb"></span></td><td class="title">bge-small-en-v1.5 (BAAI) · Cloudflare</td><td class="url"><a>developers.cloudflare.com/workers-ai</a></td><td class="tags"></td><td class="date">5/17/2026</td></tr>
+              <tr><td><span class="cb"></span></td><td class="title">7 Essential Techniques for Apache Spark</td><td class="url"><a>medium.com/@gummadin777/7-essential</a></td><td class="tags"></td><td class="date">5/17/2026</td></tr>
+              <tr><td><span class="cb"></span></td><td class="title">How I Cracked the Amazon Data Eng…</td><td class="url"><a>medium.com/@trivajay259/how-i-cracked</a></td><td class="tags"></td><td class="date">5/17/2026</td></tr>
+              <tr><td><span class="cb"></span></td><td class="title">Harness engineering: leveraging Co…</td><td class="url"><a>openai.com/index/harness-engineering</a></td><td class="tags"></td><td class="date">5/17/2026</td></tr>
+              <tr><td><span class="cb"></span></td><td class="title">Best practices for Claude Code</td><td class="url"><a>code.claude.com/docs/en/best-practices</a></td><td class="tags"></td><td class="date">5/16/2026</td></tr>
+              <tr><td><span class="cb"></span></td><td class="title">Supercharging Claude Code with the…</td><td class="url"><a>batsov.com/articles/2026/02/17/super</a></td><td class="tags"><span class="tag">AI</span><span class="tag">Claude</span><span class="tag">Tools</span></td><td class="date">5/16/2026</td></tr>
+              <tr><td><span class="cb"></span></td><td class="title">Railway MCP Server | Railway Docs</td><td class="url"><a>docs.railway.com/ai/mcp-server</a></td><td class="tags"><span class="tag">Deployment</span><span class="tag">Cloud</span></td><td class="date">4/25/2026</td></tr>
+            </tbody>
+          </table>
+        </div>
+
+        <!-- detail -->
+        <div class="col detail">
+          <div class="col-title">Details</div>
+          <div class="label">Title</div>
+          <input class="field" value="Installation - Claude-Mem" />
+          <div class="label">URL</div>
+          <input class="field readonly" value="https://docs.claude-mem.ai/installation" readonly />
+          <a class="open-link">Open ↗</a>
+          <div class="label">Tags (comma separated)</div>
+          <input class="field" value="AI, Claude" />
+          <div class="label">Content Preview</div>
+          <div class="preview">No content available.</div>
+          <div class="actions">
+            <button class="btn">Save Changes</button>
+            <button class="btn danger">Delete</button>
+          </div>
+        </div>
+
+      </div>
+    </div>
+
+  </div>
+
+  <footer class="foot">Smart Bookmarks design system — mid-slate surfaces, refined violet accent, system sans. Three surfaces, one language.</footer>
+</body>
+</html>
