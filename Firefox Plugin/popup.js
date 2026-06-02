@@ -56,14 +56,12 @@ document.addEventListener('DOMContentLoaded', () => {
             );
 
             // Success feedback
-            // saveBtn.innerHTML = '<span class="icon">✅</span> Saved!';
             setSafeHTML(saveBtn, '<span class="icon">✅</span> Saved!');
-            saveBtn.style.backgroundColor = '#00b894';
+            saveBtn.classList.add('btn-success');
 
             setTimeout(() => {
-                // saveBtn.innerHTML = originalText;
                 saveBtn.textContent = originalText;
-                saveBtn.style.backgroundColor = '';
+                saveBtn.classList.remove('btn-success');
                 saveBtn.disabled = false;
             }, 1500);
 
@@ -71,14 +69,13 @@ document.addEventListener('DOMContentLoaded', () => {
             console.error("Save failed:", error);
 
             if (error.message.includes("Pilot Mode") || error.message.includes("Access Denied")) {
-                // document.body.innerHTML = ...
                 const errorContainer = `
-                    <div class="result-container error">
+                    <div class="login-container error">
                         <div class="icon">🚫</div>
                         <h3>Access Denied</h3>
                         <p>We are currently in <strong>Pilot Mode</strong>.</p>
                         <p>Your email is not on the allowed list.</p>
-                        <button id="close-btn" class="primary-btn">Close</button>
+                        <button id="close-btn" class="btn">Close</button>
                     </div>
                 `;
                 setSafeHTML(document.body, errorContainer);
@@ -86,19 +83,17 @@ document.addEventListener('DOMContentLoaded', () => {
                 return;
             }
 
-            // saveBtn.innerHTML = '<span class="icon">❌</span> Error';
             setSafeHTML(saveBtn, '<span class="icon">❌</span> Error');
             saveBtn.title = error.message;
-            saveBtn.style.backgroundColor = '#d63031';
+            saveBtn.classList.add('btn-error');
 
             setTimeout(() => {
-                // saveBtn.innerHTML = originalText; // Reset to original text "Save Current Page"
                 saveBtn.textContent = originalText;
                 if (originalText.includes('Saved')) { // Safety check if text was stale
-                    setSafeHTML(saveBtn, '<span class="icon">🔖</span> Save Current Page');
+                    setSafeHTML(saveBtn, '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"/></svg> Save Current Page');
                 }
                 saveBtn.title = '';
-                saveBtn.style.backgroundColor = '';
+                saveBtn.classList.remove('btn-error');
                 saveBtn.disabled = false;
             }, 2000);
         }
@@ -229,8 +224,16 @@ document.addEventListener('DOMContentLoaded', () => {
 
         bookmarks.forEach(bookmark => {
             const li = document.createElement('li');
-            li.textContent = bookmark.title || bookmark.url;
+            li.className = 'recent-item';
             li.title = bookmark.url;
+            
+            const favSpan = document.createElement('span');
+            favSpan.className = 'fav';
+            li.appendChild(favSpan);
+            
+            const textNode = document.createTextNode(bookmark.title || bookmark.url);
+            li.appendChild(textNode);
+            
             li.addEventListener('click', () => {
                 browser.tabs.create({ url: bookmark.url });
             });
@@ -294,7 +297,7 @@ document.addEventListener('DOMContentLoaded', () => {
         const logoutBtn = document.createElement('button');
         logoutBtn.id = 'logout-btn';
         logoutBtn.title = 'Logout';
-        logoutBtn.innerHTML = '🚪';
+        logoutBtn.innerHTML = '<svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><path d="M16 17l5-5-5-5"/><path d="M21 12H9"/></svg>';
         logoutBtn.className = 'icon-btn'; 
 
         logoutBtn.addEventListener('click', async () => {
@@ -330,8 +333,8 @@ document.addEventListener('DOMContentLoaded', () => {
         setSafeHTML(bookmarksList, `
             <div class="login-container">
                 <p>Please login to save bookmarks.</p>
-                <button id="login-btn" class="primary-btn" style="background-color: #4285F4;">Login with Google</button>
-                <div style="font-size: 0.8em; margin-top: 10px; color: #666;">
+                <button id="login-btn" class="btn" style="background-color: #4285F4; box-shadow: none;">Login with Google</button>
+                <div class="note">
                     Note: Requires configured Client ID
                 </div>
             </div>

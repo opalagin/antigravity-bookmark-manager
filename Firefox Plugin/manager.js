@@ -267,10 +267,10 @@ document.addEventListener('DOMContentLoaded', () => {
             
             tr.innerHTML = `
                 <td><input type="checkbox" class="row-checkbox" value="${bookmark.id}" ${state.selectedBookmarkIds.has(bookmark.id) ? 'checked' : ''}></td>
-                <td><strong>${escapeHTML(bookmark.title || 'Untitled')}</strong></td>
-                <td><a href="${escapeHTML(bookmark.url)}" target="_blank" class="external-link" style="margin:0">${escapeHTML(bookmark.url)}</a></td>
-                <td>${tagsHtml}</td>
-                <td>${dateStr}</td>
+                <td class="title"><strong>${escapeHTML(bookmark.title || 'Untitled')}</strong></td>
+                <td class="url"><a href="${escapeHTML(bookmark.url)}" target="_blank" class="external-link" style="margin:0">${escapeHTML(bookmark.url)}</a></td>
+                <td class="tags">${tagsHtml}</td>
+                <td class="date">${dateStr}</td>
             `;
 
             // Row click for selection (excluding checkbox and links)
@@ -278,8 +278,8 @@ document.addEventListener('DOMContentLoaded', () => {
                 if (e.target.type === 'checkbox' || e.target.tagName === 'A') return;
                 
                 // Highlight row and show details
-                tableBody.querySelectorAll('tr').forEach(row => row.style.backgroundColor = '');
-                tr.style.backgroundColor = '#ebf4ff';
+                tableBody.querySelectorAll('tr').forEach(row => row.classList.remove('active-row'));
+                tr.classList.add('active-row');
                 
                 state.selectedBookmarkId = bookmark.id;
                 updateDetailPane(bookmark);
@@ -400,7 +400,7 @@ document.addEventListener('DOMContentLoaded', () => {
             });
             
             saveEditBtn.textContent = 'Saved!';
-            saveEditBtn.style.backgroundColor = '#48bb78';
+            saveEditBtn.classList.add('btn-success');
             
             // Reload data
             await loadTags();
@@ -412,7 +412,7 @@ document.addEventListener('DOMContentLoaded', () => {
         } finally {
             setTimeout(() => {
                 saveEditBtn.textContent = originalText;
-                saveEditBtn.style.backgroundColor = '';
+                saveEditBtn.classList.remove('btn-success');
                 saveEditBtn.disabled = false;
             }, 1500);
         }

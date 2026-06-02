@@ -1,163 +1,171 @@
-:root {
-    --primary-color: #6c5ce7;
-    --primary-hover: #5b4cc4;
-    --bg-color: #f8f9fa;
-    --card-bg: #ffffff;
-    --text-color: #2d3436;
-    --secondary-text: #636e72;
-    --border-radius: 12px;
-    --shadow: 0 4px 6px rgba(0, 0, 0, 0.05);
-}
+@import url("variables.css");
 
-@media (prefers-color-scheme: dark) {
-    :root {
-        --bg-color: #2d3436;
-        --card-bg: #353b48;
-        --text-color: #dfe6e9;
-        --secondary-text: #b2bec3;
-        --shadow: 0 4px 6px rgba(0, 0, 0, 0.2);
-    }
+* {
+    box-sizing: border-box;
 }
 
 body {
-    width: 320px;
+    width: 360px;
     margin: 0;
-    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-    background-color: var(--bg-color);
-    color: var(--text-color);
+    font-family: var(--font);
+    background-color: var(--bg);
+    color: var(--text);
+    -webkit-font-smoothing: antialiased;
 }
 
-.container {
-    padding: 16px;
-    display: flex;
-    flex-direction: column;
-    gap: 16px;
+.popup {
+    width: 360px;
+    background-color: var(--bg);
 }
 
-header h1 {
-    font-size: 1.2rem;
-    margin: 0;
-    text-align: center;
-    font-weight: 600;
-    color: var(--primary-color);
-}
-
-.primary-btn {
-    width: 100%;
-    padding: 12px;
-    background-color: var(--primary-color);
-    color: white;
-    border: none;
-    border-radius: var(--border-radius);
-    font-size: 1rem;
-    font-weight: 600;
-    cursor: pointer;
+.popup .top {
     display: flex;
     align-items: center;
-    justify-content: center;
-    gap: 8px;
-    transition: background-color 0.2s, transform 0.1s;
-    box-shadow: var(--shadow);
+    gap: 12px;
+    padding: 16px 16px 4px;
+    position: relative;
 }
 
-.primary-btn:hover {
-    background-color: var(--primary-hover);
+.popup .brand {
+    flex: 1;
+    font-size: 18px;
+    font-weight: 700;
+    color: var(--accent-hover);
+    letter-spacing: -0.01em;
+    text-align: center;
 }
 
-.primary-btn:active {
-    transform: scale(0.98);
+.popup-body {
+    padding: 14px 16px 18px;
 }
 
-.search-container input {
-    width: 100%;
-    padding: 10px 12px;
-    border: 1px solid rgba(0,0,0,0.1);
-    border-radius: var(--border-radius);
-    background-color: var(--card-bg);
-    color: var(--text-color);
-    box-sizing: border-box; /* Important for width: 100% */
-    font-size: 0.9rem;
-    transition: border-color 0.2s;
+/* Save / Manage Actions */
+.save-row {
+    display: flex;
+    gap: 9px;
+    margin-bottom: 12px;
 }
 
-.search-container input:focus {
-    outline: none;
-    border-color: var(--primary-color);
+.save-btn {
+    flex: 1;
+    padding: 13px;
+    font-size: 15px;
 }
 
-.recent-bookmarks h2 {
-    font-size: 0.9rem;
-    color: var(--secondary-text);
-    margin: 0 0 8px 0;
+.mng-btn {
+    flex: none;
+    width: 48px;
+    border-radius: var(--radius);
+}
+
+.search-container {
+    margin-bottom: 16px;
+}
+
+/* Recent Items List */
+.recent-head {
+    font-size: 11px;
+    letter-spacing: 0.16em;
     text-transform: uppercase;
-    letter-spacing: 0.5px;
+    color: var(--text-3);
+    font-weight: 600;
+    margin: 16px 2px 9px;
 }
 
-#bookmarks-list {
+.recent-list {
+    display: flex;
+    flex-direction: column;
+    gap: var(--recent-gap);
     list-style: none;
     padding: 0;
     margin: 0;
+    max-height: 280px;
+    overflow-y: auto;
 }
 
-#bookmarks-list li {
-    background-color: var(--card-bg);
-    padding: 10px;
-    margin-bottom: 8px;
-    border-radius: 8px;
-    box-shadow: var(--shadow);
-    font-size: 0.9rem;
-    white-space: nowrap;
+/* Custom Scrollbar for Recent List */
+.recent-list::-webkit-scrollbar {
+    width: 6px;
+}
+.recent-list::-webkit-scrollbar-track {
+    background: transparent;
+}
+.recent-list::-webkit-scrollbar-thumb {
+    background: var(--surface-3);
+    border-radius: 999px;
+}
+
+.recent-item {
+    background: var(--surface-2);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    padding: var(--row-pad);
+    font-size: 14px;
+    color: var(--text);
+    cursor: pointer;
     overflow: hidden;
     text-overflow: ellipsis;
-    cursor: pointer;
-    transition: background-color 0.2s;
+    white-space: nowrap;
+    transition: background 0.12s, border-color 0.12s;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    text-align: left;
 }
 
-#bookmarks-list li:hover {
-    filter: brightness(0.95);
+.recent-item:hover {
+    background: var(--surface-3);
+    border-color: var(--border-strong);
+}
+
+.recent-item .fav {
+    width: 7px;
+    height: 7px;
+    border-radius: 2px;
+    background: var(--accent-line);
+    flex: none;
 }
 
 .empty-state {
-    color: var(--secondary-text);
+    color: var(--text-3);
     text-align: center;
     font-style: italic;
-    background: none !important;
-    box-shadow: none !important;
+    padding: 20px 0;
+    font-size: 13px;
+    list-style: none;
 }
 
-/* Settings Dropdown */
-.settings-container {
-    position: absolute;
-    left: 0;
+.empty-state.error-state {
+    color: var(--danger);
+    font-weight: 500;
 }
 
-.icon-btn {
-    background: none;
-    border: none;
-    font-size: 1.2rem;
-    cursor: pointer;
-    padding: 4px;
-    border-radius: 50%;
-    transition: background-color 0.2s;
-    color: var(--text-color);
+/* Settings Dropdown Wrapper */
+.settings-wrapper {
+    position: relative;
+    flex: none;
 }
 
-.icon-btn:hover {
-    background-color: rgba(128, 128, 128, 0.2);
+.logout-wrapper {
+    flex: none;
+    display: flex;
+    align-items: center;
+    justify-content: center;
 }
 
+/* Settings Dropdown Menu */
 .dropdown-menu {
     position: absolute;
     left: 0;
-    top: 100%;
-    background-color: var(--card-bg);
-    border: 1px solid rgba(128, 128, 128, 0.2);
-    border-radius: 8px;
-    box-shadow: var(--shadow);
-    padding: 8px 0;
-    min-width: max-content;
-    white-space: nowrap;
+    top: calc(100% + 6px);
+    background-color: var(--surface-2);
+    border: 1px solid var(--border-strong);
+    border-radius: var(--radius-sm);
+    box-shadow: 0 10px 25px -10px rgba(0, 0, 0, 0.5);
+    padding: 6px 0;
+    min-width: 190px;
     z-index: 100;
+    transition: opacity 0.15s ease;
 }
 
 .dropdown-menu.hidden {
@@ -168,15 +176,55 @@ header h1 {
     display: block;
     width: 100%;
     text-align: left;
-    padding: 10px 16px;
+    padding: 10px 14px;
     background: none;
     border: none;
-    color: var(--text-color);
-    font-size: 0.9rem;
+    color: var(--text);
+    font-size: 13px;
+    font-weight: 500;
     cursor: pointer;
-    transition: background-color 0.2s;
+    transition: background-color 0.12s, color 0.12s;
+    outline: none;
 }
 
 .dropdown-item:hover {
-    background-color: rgba(128, 128, 128, 0.2);
+    background-color: var(--surface-3);
+    color: var(--accent-hover);
+}
+
+.dropdown-item:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+/* Login Panel styles */
+.login-container {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 24px 16px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    text-align: center;
+    margin-top: 10px;
+}
+
+.login-container p {
+    margin: 0 0 16px;
+    font-size: 14px;
+    color: var(--text-2);
+}
+
+.login-container #login-btn {
+    width: 100%;
+    padding: 12px;
+    font-size: 14px;
+}
+
+.login-container .note {
+    font-size: 11px;
+    margin-top: 12px;
+    color: var(--text-3);
 }
