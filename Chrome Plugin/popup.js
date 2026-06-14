@@ -1,3 +1,4 @@
+const browser = chrome;
 document.addEventListener('DOMContentLoaded', () => {
     const saveBtn = document.getElementById('save-btn');
     const searchInput = document.getElementById('search-input');
@@ -23,7 +24,7 @@ document.addEventListener('DOMContentLoaded', () => {
             setSafeHTML(saveBtn, '<span class="icon">⏳</span> Saving...');
 
             // Get current tab
-            const tabs = await chrome.tabs.query({ active: true, currentWindow: true });
+            const tabs = await browser.tabs.query({ active: true, currentWindow: true });
             const currentTab = tabs[0];
 
             if (!currentTab) {
@@ -31,23 +32,19 @@ document.addEventListener('DOMContentLoaded', () => {
             }
 
             // 2. Inject Extraction Scripts
-            await chrome.scripting.executeScript({
+            await browser.scripting.executeScript({
                 target: { tabId: currentTab.id },
                 files: ['lib/Readability.js', 'lib/turndown.js']
             });
 
             // 3. Execute Extraction Logic
-            const executionResults = await chrome.scripting.executeScript({
+            const executionResults = await browser.scripting.executeScript({
                 target: { tabId: currentTab.id },
                 files: ['extract.js']
             });
 
             const extractedData = executionResults[0].result;
             console.log("Extracted:", extractedData);
-
-            // 3.5 Get Tags
-            const tagsInput = document.getElementById('tags-input');
-            const tags = tagsInput.value.split(',').map(t => t.trim()).filter(t => t);
 
             // 4. Send to Backend
             if (!window.api) throw new Error("API client not loaded");
@@ -56,18 +53,16 @@ document.addEventListener('DOMContentLoaded', () => {
                 extractedData.url,
                 extractedData.title,
                 extractedData.content,
-                tags
+                [] // Removed tags
             );
 
             // Success feedback
-            // saveBtn.innerHTML = '<span class="icon">✅</span> Saved!';
             setSafeHTML(saveBtn, '<span class="icon">✅</span> Saved!');
-            saveBtn.style.backgroundColor = '#00b894';
+            saveBtn.classList.add('btn-success');
 
             setTimeout(() => {
-                // saveBtn.innerHTML = originalText;
                 saveBtn.textContent = originalText;
-                saveBtn.style.backgroundColor = '';
+                saveBtn.classList.remove('btn-success');
                 saveBtn.disabled = false;
             }, 1500);
 
@@ -75,14 +70,13 @@ document.addEventListener('DOMContentLoaded', () => {
             console.error("Save failed:", error);
 
             if (error.message.includes("Pilot Mode") || error.message.includes("Access Denied")) {
-                // document.body.innerHTML = ...
                 const errorContainer = `
-                    <div class="result-container error">
+                    <div class="login-container error">
                         <div class="icon">🚫</div>
                         <h3>Access Denied</h3>
                         <p>We are currently in <strong>Pilot Mode</strong>.</p>
                         <p>Your email is not on the allowed list.</p>
-                        <button id="close-btn" class="primary-btn">Close</button>
+                        <button id="close-btn" class="btn">Close</button>
                     </div>
                 `;
                 setSafeHTML(document.body, errorContainer);
@@ -90,23 +84,99 @@ document.addEventListener('DOMContentLoaded', () => {
                 return;
             }
 
-            // saveBtn.innerHTML = '<span class="icon">❌</span> Error';
             setSafeHTML(saveBtn, '<span class="icon">❌</span> Error');
             saveBtn.title = error.message;
-            saveBtn.style.backgroundColor = '#d63031';
+            saveBtn.classList.add('btn-error');
 
             setTimeout(() => {
-                // saveBtn.innerHTML = originalText; // Reset to original text "Save Current Page"
                 saveBtn.textContent = originalText;
                 if (originalText.includes('Saved')) { // Safety check if text was stale
-                    setSafeHTML(saveBtn, '<span class="icon">🔖</span> Save Current Page');
+                    setSafeHTML(saveBtn, '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"/></svg> Save Current Page');
                 }
                 saveBtn.title = '';
-                saveBtn.style.backgroundColor = '';
+                saveBtn.classList.remove('btn-error');
                 saveBtn.disabled = false;
             }, 2000);
         }
     });
+
+    // 1.5 Handle Manage Library
+    const manageBtn = document.getElementById('manage-btn');
+    if (manageBtn) {
+        manageBtn.addEventListener('click', () => {
+            browser.tabs.create({ url: browser.runtime.getURL("manager.html") });
+        });
+    }
+
+    // 1.6 Handle Settings Dropdown and Reembed
+    const settingsBtn = document.getElementById('settings-btn');
+    const settingsDropdown = document.getElementById('settings-dropdown');
+    const reembedBtn = document.getElementById('reembed-btn');
+
+    if (settingsBtn && settingsDropdown) {
+        settingsBtn.addEventListener('click', (e) => {
+            e.stopPropagation(); // Prevent document click from immediately closing it
+            settingsDropdown.classList.toggle('hidden');
+        });
+
+        // Close dropdown when clicking outside
+        document.addEventListener('click', (e) => {
+            if (!settingsDropdown.contains(e.target) && e.target !== settingsBtn) {
+                settingsDropdown.classList.add('hidden');
+            }
+        });
+    }
+
+    if (reembedBtn) {
+        reembedBtn.addEventListener('click', async () => {
+            if (!window.api) return;
+            try {
+                reembedBtn.disabled = true;
+                reembedBtn.textContent = 'Starting re-embed...';
+                
+                await window.api.startReembed();
+                
+                // Start polling
+                const pollInterval = setInterval(async () => {
+                    try {
+                        const status = await window.api.getReembedStatus();
+                        if (!status || status.status === "none" || status.status === "starting") {
+                            reembedBtn.textContent = 'Starting...';
+                        } else if (status.status === "running") {
+                            const percent = status.total > 0 ? Math.round((status.processed / status.total) * 100) : 0;
+                            reembedBtn.textContent = `Re-embedding... (${percent}%)`;
+                        } else if (status.status === "completed") {
+                            clearInterval(pollInterval);
+                            reembedBtn.textContent = 'Completed!';
+                            setTimeout(() => {
+                                reembedBtn.disabled = false;
+                                reembedBtn.textContent = 'Reembed your bookmarks...';
+                                settingsDropdown.classList.add('hidden');
+                            }, 2000);
+                        } else if (status.status === "failed") {
+                            clearInterval(pollInterval);
+                            reembedBtn.textContent = 'Failed!';
+                            console.error("Re-embed failed:", status.error);
+                            setTimeout(() => {
+                                reembedBtn.disabled = false;
+                                reembedBtn.textContent = 'Reembed your bookmarks...';
+                            }, 3000);
+                        }
+                    } catch (pollErr) {
+                        console.error("Polling error:", pollErr);
+                    }
+                }, 1500);
+
+            } catch (err) {
+                console.error("Failed to start re-embed:", err);
+                reembedBtn.textContent = 'Error starting';
+                setTimeout(() => {
+                    reembedBtn.disabled = false;
+                    reembedBtn.textContent = 'Reembed your bookmarks...';
+                }, 2000);
+            }
+        });
+    }
 
     // 2. Handle Search Input
     let debounceTimer;
@@ -155,10 +225,18 @@ document.addEventListener('DOMContentLoaded', () => {
 
         bookmarks.forEach(bookmark => {
             const li = document.createElement('li');
-            li.textContent = bookmark.title || bookmark.url;
+            li.className = 'recent-item';
             li.title = bookmark.url;
+            
+            const favSpan = document.createElement('span');
+            favSpan.className = 'fav';
+            li.appendChild(favSpan);
+            
+            const textNode = document.createTextNode(bookmark.title || bookmark.url);
+            li.appendChild(textNode);
+            
             li.addEventListener('click', () => {
-                chrome.tabs.create({ url: bookmark.url });
+                browser.tabs.create({ url: bookmark.url });
             });
             bookmarksList.appendChild(li);
         });
@@ -194,9 +272,15 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // Auth & Init
     async function checkAuth() {
-        const stored = await chrome.storage.local.get('authToken');
-        if (stored.authToken) {
-            api.setToken(stored.authToken);
+        // One-shot migration shim: if legacy 'authToken' exists but 'accessToken' does not, remove it to force re-login
+        const storedAuth = await browser.storage.local.get('authToken');
+        const storedJwt = await browser.storage.local.get(['accessToken', 'refreshToken']);
+        if (storedAuth.authToken && !storedJwt.accessToken) {
+            await browser.storage.local.remove('authToken');
+        }
+
+        if (storedJwt.accessToken && storedJwt.refreshToken) {
+            api.setTokens(storedJwt.accessToken, storedJwt.refreshToken);
             showLogoutButton();
             loadRecent();
         } else {
@@ -208,25 +292,38 @@ document.addEventListener('DOMContentLoaded', () => {
         // Check if button already exists
         if (document.getElementById('logout-btn')) return;
 
-        const header = document.querySelector('header');
+        const container = document.getElementById('logout-container');
+        if (!container) return;
+        
         const logoutBtn = document.createElement('button');
         logoutBtn.id = 'logout-btn';
-        logoutBtn.textContent = 'Logout';
-        logoutBtn.className = 'secondary-btn'; // Assuming this class exists or will default to simple style
-        logoutBtn.style.position = 'absolute';
-        logoutBtn.style.right = '15px';
-        logoutBtn.style.top = '15px';
-        logoutBtn.style.fontSize = '0.8rem';
-        logoutBtn.style.padding = '4px 8px';
+        logoutBtn.title = 'Logout';
+        logoutBtn.innerHTML = '<svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><path d="M16 17l5-5-5-5"/><path d="M21 12H9"/></svg>';
+        logoutBtn.className = 'icon-btn'; 
 
         logoutBtn.addEventListener('click', async () => {
-            await chrome.storage.local.remove('authToken');
-            api.setToken(null);
+            const stored = await browser.storage.local.get('refreshToken');
+            const rt = stored.refreshToken;
+            if (rt) {
+                // Best-effort logout hit to backend
+                try {
+                    const result = await browser.storage.local.get("apiUrl");
+                    const baseUrl = result.apiUrl || "http://localhost";
+                    await fetch(`${baseUrl}/auth/logout`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ refresh_token: rt })
+                    });
+                } catch (e) {
+                    console.error("Logout request to backend failed:", e);
+                }
+            }
+            await api.clearTokens();
             document.getElementById('logout-btn').remove();
             showLogin();
         });
 
-        header.appendChild(logoutBtn);
+        container.appendChild(logoutBtn);
     }
 
     function showLogin() {
@@ -237,8 +334,8 @@ document.addEventListener('DOMContentLoaded', () => {
         setSafeHTML(bookmarksList, `
             <div class="login-container">
                 <p>Please login to save bookmarks.</p>
-                <button id="login-btn" class="primary-btn" style="background-color: #4285F4;">Login with Google</button>
-                <div style="font-size: 0.8em; margin-top: 10px; color: #666;">
+                <button id="login-btn" class="btn" style="background-color: #4285F4; box-shadow: none;">Login with Google</button>
+                <div class="note">
                     Note: Requires configured Client ID
                 </div>
             </div>
@@ -251,12 +348,12 @@ document.addEventListener('DOMContentLoaded', () => {
                 // CLIENT CONFIGURATION
                 // TODO: User must replace this with their actual Client ID from Google Console
                 const CLIENT_ID = "127114677197-aei7k7s99vosi3hpqqti1v8h3r493te8.apps.googleusercontent.com";
-                const REDIRECT_URI = chrome.identity.getRedirectURL();
+                const REDIRECT_URI = browser.identity.getRedirectURL();
                 const AUTH_URL = `https://accounts.google.com/o/oauth2/v2/auth?client_id=${CLIENT_ID}&response_type=token&redirect_uri=${encodeURIComponent(REDIRECT_URI)}&scope=openid%20email%20profile`;
 
                 console.log("Launching Auth Flow:", AUTH_URL);
 
-                const redirectUrl = await chrome.identity.launchWebAuthFlow({
+                const redirectUrl = await browser.identity.launchWebAuthFlow({
                     interactive: true,
                     url: AUTH_URL
                 });
@@ -268,8 +365,30 @@ document.addEventListener('DOMContentLoaded', () => {
                     const token = params.get("access_token");
 
                     if (token) {
-                        await chrome.storage.local.set({ authToken: token });
-                        api.setToken(token);
+                        setSafeHTML(bookmarksList, '<li class="empty-state">Exchanging token with backend...</li>');
+                        const result = await browser.storage.local.get("apiUrl");
+                        const baseUrl = result.apiUrl || "http://localhost";
+                        
+                        const exchangeResponse = await fetch(`${baseUrl}/auth/google`, {
+                            method: "POST",
+                            headers: {
+                                "Content-Type": "application/json"
+                            },
+                            body: JSON.stringify({ google_access_token: token })
+                        });
+                        
+                        if (!exchangeResponse.ok) {
+                            const errorData = await exchangeResponse.json().catch(() => ({}));
+                            throw new Error(errorData.detail || "Backend authentication failed");
+                        }
+                        
+                        const data = await exchangeResponse.json();
+                        await browser.storage.local.set({
+                            accessToken: data.access_token,
+                            refreshToken: data.refresh_token
+                        });
+                        api.setTokens(data.access_token, data.refresh_token);
+                        
                         showLogoutButton();
                         setSafeHTML(bookmarksList, '<li class="empty-state">Logged in! Loading...</li>');
                         loadRecent();
