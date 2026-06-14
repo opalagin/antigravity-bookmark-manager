@@ -1,4 +1,4 @@
-const browser = chrome;
+globalThis.browser = globalThis.browser || chrome;
 // API Base URL is now dynamic via browser.storage.local
 
 const api = {

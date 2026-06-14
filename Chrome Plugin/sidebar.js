@@ -1,4 +1,4 @@
-const browser = chrome;
+globalThis.browser = globalThis.browser || chrome;
 document.addEventListener('DOMContentLoaded', () => {
     const chatInput = document.getElementById('chat-input');
     const sendBtn = document.getElementById('send-btn');

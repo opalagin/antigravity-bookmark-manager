@@ -1,4 +1,4 @@
-const browser = chrome;
+globalThis.browser = globalThis.browser || chrome;
 document.addEventListener('DOMContentLoaded', () => {
     const saveBtn = document.getElementById('save-btn');
     const searchInput = document.getElementById('search-input');

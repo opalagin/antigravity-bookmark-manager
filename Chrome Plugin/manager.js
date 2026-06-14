@@ -1,4 +1,4 @@
-const browser = chrome;
+globalThis.browser = globalThis.browser || chrome;
 document.addEventListener('DOMContentLoaded', () => {
     // State
     let state = {
