@@ -1,3 +1,4 @@
+globalThis.browser = globalThis.browser || chrome;
 const DEFAULT_API_URL = "http://localhost";
 
 function saveOptions(e) {
@@ -12,7 +13,7 @@ function saveOptions(e) {
         url = DEFAULT_API_URL;
     }
 
-    chrome.storage.local.set({
+    browser.storage.local.set({
         apiUrl: url
     }).then(() => {
         const status = document.getElementById("status");
@@ -24,7 +25,7 @@ function saveOptions(e) {
 }
 
 function restoreOptions() {
-    chrome.storage.local.get("apiUrl").then((result) => {
+    browser.storage.local.get("apiUrl").then((result) => {
         document.querySelector("#apiUrl").value = result.apiUrl || DEFAULT_API_URL;
     });
 }

@@ -1,3 +1,4 @@
+globalThis.browser = globalThis.browser || chrome;
 document.addEventListener('DOMContentLoaded', () => {
     const chatInput = document.getElementById('chat-input');
     const sendBtn = document.getElementById('send-btn');
@@ -10,22 +11,38 @@ document.addEventListener('DOMContentLoaded', () => {
         sendBtn.disabled = !this.value.trim();
     });
 
+    // Close Sidebar Handler
+    const closeBtn = document.getElementById('close-sidebar-btn');
+    if (closeBtn) {
+        closeBtn.addEventListener('click', () => {
+            if (typeof browser !== 'undefined' && browser.sidebarAction && browser.sidebarAction.close) {
+                browser.sidebarAction.close();
+            } else {
+                window.close();
+            }
+        });
+    }
+
     // --- Auth Initialization ---
     async function checkAuth() {
         if (!window.api) return;
-        const stored = await chrome.storage.local.get('authToken');
-        if (stored.authToken) {
-            window.api.setToken(stored.authToken);
+        const stored = await browser.storage.local.get(['accessToken', 'refreshToken']);
+        if (stored.accessToken && stored.refreshToken) {
+            window.api.setTokens(stored.accessToken, stored.refreshToken);
         }
     }
 
     // Listen for login/logout events from popup
-    chrome.storage.onChanged.addListener((changes, area) => {
-        if (area === 'local' && changes.authToken) {
-            if (changes.authToken.newValue) {
-                window.api.setToken(changes.authToken.newValue);
-            } else {
-                window.api.setToken(null);
+    browser.storage.onChanged.addListener((changes, area) => {
+        if (area === 'local') {
+            if (changes.accessToken || changes.refreshToken) {
+                browser.storage.local.get(['accessToken', 'refreshToken']).then(stored => {
+                    if (stored.accessToken && stored.refreshToken) {
+                        window.api.setTokens(stored.accessToken, stored.refreshToken);
+                    } else {
+                        window.api.setTokens(null, null);
+                    }
+                });
             }
         }
     });
@@ -53,7 +70,7 @@ document.addEventListener('DOMContentLoaded', () => {
             const response = await window.api.chat(text);
 
             // 4. Update AI Message
-            updateMessage(loadingId, response.answer);
+            updateMessage(loadingId, response.answer, response.sources);
 
         } catch (error) {
             console.error(error);
@@ -93,7 +110,7 @@ document.addEventListener('DOMContentLoaded', () => {
         return msgDiv; // Return element for updates
     }
 
-    function updateMessage(element, newText) {
+    function updateMessage(element, newText, sources = []) {
         element.classList.remove('loading');
         const contentDiv = element.querySelector('.content');
 
@@ -131,6 +148,21 @@ document.addEventListener('DOMContentLoaded', () => {
             }
         } else {
             contentDiv.textContent = newText;
+        }
+
+        // Render Citations / Reference chips if available
+        if (sources && sources.length > 0) {
+            const citeContainer = document.createElement('div');
+            citeContainer.className = 'cite-container';
+            
+            sources.forEach(source => {
+                const tagSpan = document.createElement('span');
+                tagSpan.className = 'tag';
+                tagSpan.textContent = source;
+                citeContainer.appendChild(tagSpan);
+            });
+            
+            contentDiv.appendChild(citeContainer);
         }
 
         history.scrollTop = history.scrollHeight;
