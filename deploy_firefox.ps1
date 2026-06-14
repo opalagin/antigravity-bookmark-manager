@@ -1,4 +1,8 @@
-# Firefox Extension Assembly and Signing Script
+# Firefox Extension Deployment Script
+
+param (
+    [string]$Version
+)
 
 $ErrorActionPreference = "Stop"
 
@@ -92,11 +96,65 @@ else {
     Write-Host "API keys found." -ForegroundColor Green
 }
 
+# Get original manifest content
+$ManifestPath = "$ExtensionDir\manifest.json"
+if (-not (Test-Path $ManifestPath)) {
+    Write-Error "manifest.json not found at '$ManifestPath'!"
+    Exit 1
+}
+$OriginalContent = Get-Content $ManifestPath -Raw
+
+# Determine new version
+$utf8WithoutBom = New-Object System.Text.UTF8Encoding($false)
+$NewVersion = $null
+
+if (-not [string]::IsNullOrWhiteSpace($Version)) {
+    if ($Version -match "^\d+\.\d+\.\d+$") {
+        $NewVersion = $Version
+        Write-Host "Using command line override version: $NewVersion" -ForegroundColor Cyan
+    } else {
+        Write-Error "Invalid version format '$Version'. Expected format: X.Y.Z"
+        Exit 1
+    }
+} else {
+    # Auto-increment manifest version
+    Write-Host "Auto-incrementing manifest version..." -ForegroundColor Cyan
+    if ($OriginalContent -match '"version"\s*:\s*"(\d+)\.(\d+)\.(\d+)"') {
+        $CurrentVersion = "$($Matches[1]).$($Matches[2]).$($Matches[3])"
+        $Major = [int]$Matches[1]
+        $Minor = [int]$Matches[2]
+        $Patch = [int]$Matches[3]
+        $NewPatch = $Patch + 1
+        $NewVersion = "$Major.$Minor.$NewPatch"
+    } else {
+        Write-Error "Could not find or parse version string in $ManifestPath (expected format: '""version"": ""X.Y.Z""')"
+        Exit 1
+    }
+}
+
+# Update manifest version in file
+$NewContent = $OriginalContent -replace '"version"\s*:\s*"\d+\.\d+\.\d+"', ('"version": "' + $NewVersion + '"')
+[System.IO.File]::WriteAllText($ManifestPath, $NewContent, $utf8WithoutBom)
+
+if (-not [string]::IsNullOrWhiteSpace($Version)) {
+    Write-Host "Set manifest version to $NewVersion" -ForegroundColor Green
+} else {
+    Write-Host "Successfully incremented manifest version from $CurrentVersion to $NewVersion" -ForegroundColor Green
+}
+
+# Helper to revert manifest if something fails
+function Revert-Manifest {
+    param ($Reason)
+    Write-Host "Reverting manifest version to original because: $Reason" -ForegroundColor Yellow
+    [System.IO.File]::WriteAllText($ManifestPath, $OriginalContent, $utf8WithoutBom)
+}
+
 # Build and Sign
 Write-Host "Building and signing extension..." -ForegroundColor Cyan
 
 # Verify ExtensionDir exists
 if (-not (Test-Path $ExtensionDir)) {
+    Revert-Manifest "Extension directory '$ExtensionDir' not found!"
     Write-Error "Extension directory '$ExtensionDir' not found!"
 }
 
@@ -123,9 +181,11 @@ try {
         Write-Host "Extension successfully signed! Check $ArtifactsDir for the .xpi file." -ForegroundColor Green
     }
     else {
+        Revert-Manifest "web-ext sign failed with exit code $($process.ExitCode)"
         Write-Error "web-ext exited with error code $($process.ExitCode). Command was: $cmdLine"
     }
 }
 catch {
+    Revert-Manifest "an error occurred during execution: $_"
     Write-Error "Failed to execute web-ext. Error: $_"
 }
