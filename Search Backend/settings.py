@@ -32,7 +32,4 @@ except ValueError:
 JWT_ISSUER = os.getenv("JWT_ISSUER", "smart-bookmark-manager")
 JWT_AUDIENCE = os.getenv("JWT_AUDIENCE", "api")
 
-# Migration and legacy token compatibility
-AUTH_ALLOW_LEGACY_GOOGLE_TOKEN = os.getenv(
-    "AUTH_ALLOW_LEGACY_GOOGLE_TOKEN", "0"
-) in ("1", "true", "True")
+
