@@ -239,9 +239,7 @@ security = HTTPBearer()
 
 
 async def get_current_user(
-    request: Request,
     credentials: HTTPAuthorizationCredentials = Depends(security),
-    session: AsyncSession = Depends(get_session)
 ) -> str:
     token = credentials.credentials
 
@@ -263,46 +261,6 @@ async def get_current_user(
     except jwt.ExpiredSignatureError:
         raise HTTPException(status_code=401, detail="Token expired")
     except jwt.InvalidTokenError as e:
-        # Check migration fallback flag for legacy Google OAuth tokens
-        if settings.AUTH_ALLOW_LEGACY_GOOGLE_TOKEN:
-            try:
-                response = await request.app.state.http.get(
-                    "https://www.googleapis.com/oauth2/v3/userinfo",
-                    headers={"Authorization": f"Bearer {token}"}
-                )
-                if response.status_code == 200:
-                    user_info = response.json()
-                    user_id = user_info.get("sub")
-                    email = user_info.get("email")
-                    if user_id and email:
-                        # Verify allowed user in db
-                        stmt = select(AllowedUser).where(AllowedUser.email == email)
-                        result = await session.execute(stmt)
-                        is_allowed = result.scalar_one_or_none()
-                        if is_allowed:
-                            return user_id
-                        else:
-                            print(
-                                f"Fallback Denied: Email '{email}' "
-                                "is not in allowed list."
-                            )
-                            raise HTTPException(
-                                status_code=403,
-                                detail="Pilot Mode: Access restricted "
-                                "to allowed users only.",
-                            )
-                    else:
-                        print("Fallback Denied: Google response missing sub or email.")
-                else:
-                    print(
-                        "Fallback Denied: Google userinfo endpoint "
-                        f"returned status {response.status_code}"
-                    )
-            except HTTPException:
-                raise
-            except Exception as ex:
-                print(f"Fallback exception: {ex}")
-                pass
         raise HTTPException(status_code=401, detail=f"Invalid token: {e}")
 
 
