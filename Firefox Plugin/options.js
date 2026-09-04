@@ -1,3 +1,4 @@
+globalThis.browser = globalThis.browser || chrome;
 const DEFAULT_API_URL = "http://localhost";
 
 function saveOptions(e) {
