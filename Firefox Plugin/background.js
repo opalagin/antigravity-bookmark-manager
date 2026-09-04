@@ -1,3 +1,4 @@
+globalThis.browser = globalThis.browser || chrome;
 // Background script for Smart Bookmark Manager
 // Currently a placeholder for future sidebar or context menu logic
 

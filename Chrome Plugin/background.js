@@ -7,4 +7,3 @@ console.log("Smart Bookmark Manager: Background script loaded.");
 browser.runtime.onInstalled.addListener(() => {
     console.log("Extension installed.");
 });
-
