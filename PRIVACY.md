@@ -1,64 +1,88 @@
-# Privacy Policy for Smart Bookmark Manager (Microsoft Edge Extension)
+# Privacy Policy for Smart Bookmark Manager
 
-**Last Updated:** June 15, 2026
+**Last Updated:** September 4, 2026
 
-This Privacy Policy explains how the **Smart Bookmark Manager** extension ("the Extension") for Microsoft Edge handles information. We are committed to protecting your privacy and ensuring you have complete control over your data.
+This Privacy Policy explains how the **Smart Bookmark Manager** extension ("the Extension") for Google Chrome, Microsoft Edge, and Mozilla Firefox handles user information. We are committed to protecting your privacy, adhering to the Google Chrome Web Store User Data Policy, and ensuring you maintain full control over your data.
 
 ---
 
 ## 1. Information We Collect and Process
 
-In alignment with the Microsoft Edge developer data disclosures, the Extension processes only the following category of data:
+The Extension only processes data necessary to fulfill its single purpose: saving, organizing, and retrieving personal bookmarks with AI assistance.
 
-*   **Website Content:** When you explicitly choose to bookmark a web page, the Extension extracts the text content and metadata of that specific page (the "Website Content") to index, summarize, and generate tags for it.
+### A. Information You Provide Directly
+* **Website Content:** When you explicitly click "Save Bookmark", the Extension captures the current webpage URL, page title, and main article text (extracted client-side using Readability) to index and summarize it. The Extension **does not** track or record pages you do not explicitly choose to save.
+* **Search & Chat Queries:** Questions and keywords you enter into the search bar or AI companion side panel to retrieve information from your bookmarked knowledge base.
 
-### What We Do NOT Collect
-*   **Personally Identifiable Information (PII):** The Extension does not collect, record, or transmit any personally identifiable information (such as your name, email address, physical address, phone number, or IP address).
-*   **Authentication Information:** The Extension does not collect, store, or transmit your authentication credentials (such as usernames, passwords, login tokens, or session identifiers). All API keys configured in the Extension (e.g., your AI backend URL or optional tokens) are stored strictly locally on your device.
+### B. Authentication & Session Data
+* **Google Account Authentication:** When you choose to sign in via Google OAuth (`chrome.identity.launchWebAuthFlow`), an authentication token is transmitted securely to your backend API server to verify your identity and generate session tokens.
+* **Local Session Tokens:** Secure session tokens (JWT access and refresh tokens) and user configuration settings (such as your backend API endpoint URL) are stored locally on your device using `chrome.storage.local`.
 
----
-
-## 2. How Your Information is Used
-
-The processed Website Content is used solely to provide the core functionality of the Extension:
-*   Indexing your bookmarks to make them searchable.
-*   Generating automatic AI summaries and relevant categorization tags.
-*   Answering natural language questions about your bookmarked pages.
+### C. What We Do NOT Collect
+* **No Browsing History Tracking:** The Extension does not monitor, log, or transmit your overall browsing activity or search engine queries.
+* **No Financial or Sensitive Personal Data:** The Extension does not collect credit card numbers, health data, or government identifiers.
+* **No Third-Party Advertising Trackers:** The Extension contains no ads, ad-tracking pixels, or third-party behavioral analytics SDKs.
 
 ---
 
-## 3. Data Storage, Hosting, and Third-Party Transmission
+## 2. How Your Information Is Used
 
-The Extension is designed with a self-hosted architecture, meaning you maintain complete ownership of your data environment:
-
-*   **Local Storage:** Your configuration preferences and settings (such as the base URL of your Search Backend) are stored locally on your device using the Microsoft Edge secure extension storage API (`chrome.storage.local`).
-*   **Self-Hosted Backend:** The extracted Website Content is transmitted directly to your own self-hosted **Search Backend** (e.g. running locally via Docker or deployed on your private Railway hosting) and stored in your private database (e.g., PostgreSQL). **No data is sent to the Extension developer.**
-*   **Third-Party AI Services:** To generate summaries and answer questions, Website Content may be sent from your private Search Backend to your configured AI provider (such as the OpenAI API or a locally hosted LLM). This data transmission is governed by your agreement and the privacy policy of the selected AI provider.
-
----
-
-## 4. User Control, Access, and Deletion
-
-Under Microsoft Edge Developer Policy 1.5.2, you have complete control over your data:
-*   **Access:** You have full access to all saved Website Content through your self-hosted backend database or the Extension's interface.
-*   **Deletion:** You can delete your bookmarks and their associated Website Content at any time directly through the Extension's management dashboard, which will permanently purge the content from your self-hosted database.
-*   **Settings Reset:** You can clear all locally stored extension options and API tokens by uninstalling the Extension or clearing the extension data in Microsoft Edge (`edge://extensions`).
+Data processed by the Extension is used strictly to provide its core features:
+1. Indexing your saved bookmarks to make them searchable.
+2. Generating AI-assisted summaries and automated tags for saved articles.
+3. Enabling natural language question-answering over your saved reading list via the side panel and popup.
+4. Authenticating you with your designated backend service.
 
 ---
 
-## 5. Compliance with Laws
+## 3. Google Chrome Web Store Policy Disclosures
 
-This policy is designed to comply with global privacy regulations, including the General Data Protection Regulation (GDPR) and the California Consumer Privacy Act (CCPA). Because you host the backend database, you are the sole controller of the stored data.
+In compliance with the **Google Chrome Web Store User Data Policy** and **Limited Use** requirements:
+
+* **Not Sold to Third Parties:** We do **NOT** sell, rent, or monetize your personal data or bookmarked content to data brokers, advertising networks, or any other third parties.
+* **No Unrelated Transfers:** We do **NOT** transfer your data for purposes unrelated to the core functionality of the Extension (saving and searching bookmarks).
+* **No Creditworthiness or Lending Use:** We do **NOT** use or transfer your data to determine creditworthiness or for lending purposes.
+* **Human Review:** No humans read your bookmarked content or private search queries, except if you explicitly request technical support and share specific error logs or snippets.
 
 ---
 
-## 6. Changes to This Policy
+## 4. Data Storage, Architecture, and Third-Party Services
 
-We may update this Privacy Policy from time to time to reflect changes in our features or legal requirements. The updated policy will be posted on this page with an updated "Last Updated" date.
+The Extension operates in conjunction with a user-configured backend service:
+
+* **Local Storage on Device:** Tokens and configuration preferences reside strictly within your browser's protected local storage (`chrome.storage.local`).
+* **Backend API Server:** Saved bookmarks and chat queries are transmitted over encrypted HTTPS/HTTP to your designated backend server (e.g., your self-hosted Docker instance or deployed cloud backend on Railway).
+* **Third-Party AI Providers:** To generate AI summaries and answer queries, bookmark text may be processed through an AI provider configured on the backend (such as OpenAI API or a self-hosted LLM). Such data handling is strictly limited to processing your requested prompt/summary and subject to the respective provider's API privacy terms.
 
 ---
 
-## 7. Contact Us
+## 5. User Control, Data Retention, and Deletion
 
-If you have any questions or feedback about this Privacy Policy, please contact the developer at:
-*   **Developer Contact:** apalagin at outlook.com
+You have complete authority over your data:
+
+* **Access & Edit:** You can view, search, and edit all your saved bookmarks at any time via the Manager page (`manager.html`) or the Side Panel.
+* **Deletion:** You can delete individual bookmarks or purge all saved items directly from the Extension management UI, which removes them from the backend database.
+* **Account / Token Removal:** You can log out at any time or uninstall the Extension. Uninstalling the Extension or clearing extension data (`chrome://extensions`) immediately purges all local tokens and configurations from your device.
+
+---
+
+## 6. Security
+
+We take reasonable and appropriate technical measures to protect your information:
+* All communication with external and backend services occurs over standard secure network protocols.
+* Authentication tokens are stored in sandboxed browser extension storage inaccessible to unauthorized web pages.
+
+---
+
+## 7. Changes to This Privacy Policy
+
+We may update this Privacy Policy from time to time to reflect feature enhancements or regulatory changes. Any revisions will be reflected with an updated "Last Updated" date at the top of this document.
+
+---
+
+## 8. Contact Us
+
+If you have questions, concerns, or requests regarding this Privacy Policy or your data, please contact:
+* **Developer:** Alex Palagin
+* **Email:** apalagin@outlook.com
+* **Repository:** https://github.com/opalagin/antigravity-bookmark-manager
