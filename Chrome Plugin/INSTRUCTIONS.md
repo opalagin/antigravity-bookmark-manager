@@ -35,34 +35,40 @@
 
 ## Packaging & Store Deployment
 
-To distribute the extension through the **Microsoft Edge Add-ons Store**, you can package it into a production-ready `.zip` archive using the PowerShell script `deploy_edge.ps1` in the workspace root.
+### Google Chrome Web Store Packaging (`deploy_chrome.ps1`)
 
-### Deployment Workflow
-1. **Manual Upload (Initial Submission):** Microsoft requires the first version of any extension to be submitted manually via the Partner Center dashboard. The script will generate the clean `.zip` archive for you.
-2. **Automated Submission (Subsequent Updates):** Once the extension is created, you can generate API credentials in the Partner Center and save them in `.env`. The script will then automatically upload and publish updates to the store using the Microsoft Edge Add-ons REST API.
+To package the extension into a clean `.zip` archive ready for upload to the **Chrome Web Store Developer Dashboard**, run:
 
-### Running the Deployment Script
+```powershell
+.\deploy_chrome.ps1
+```
 
-1. Open PowerShell in the workspace root.
-2. Run the deployment script:
-   ```powershell
-   .\deploy_edge.ps1
-   ```
-   This will:
-   - Auto-increment the patch version of the extension in `manifest.json` (e.g. `1.0.18` -> `1.0.19`).
-   - Copy only the required source files to a clean temporary folder (ignoring development files and previous artifacts).
-   - Compress the files into `Chrome Plugin\artifacts\chrome-plugin-v<Version>.zip`.
-   - Check your local `.env` file for:
-     - `EDGE_PRODUCT_ID`
-     - `EDGE_CLIENT_ID`
-     - `EDGE_API_KEY`
-   - **If keys are missing:** Complete the run by outputting the path to the `.zip` file and instructions on how to manually upload it to the Partner Center.
-   - **If keys are present:** Authenticate using Microsoft's REST API v1.1, upload the new package, poll the server to verify processing, and automatically request publication.
+This will:
+- Auto-increment the patch version in `manifest.json` (e.g., `1.0.23` -> `1.0.24`).
+- Stage clean source files in a temporary folder (excluding `.git`, `artifacts`, `INSTRUCTIONS.md`, temp files, etc.).
+- Ensure `manifest.json` is at the root of the archive.
+- Compress the extension into `Chrome Plugin\artifacts\chrome-plugin-v<Version>.zip`.
+- Print direct links and instructions for manual upload to the [Chrome Web Store Developer Dashboard](https://chrome.google.com/webstore/devconsole).
 
-3. Alternatively, specify a custom version override:
-   ```powershell
-   .\deploy_edge.ps1 -Version "1.1.0"
-   ```
+#### Advanced Options:
+- **Package without incrementing version:**
+  ```powershell
+  .\deploy_chrome.ps1 -NoIncrement
+  ```
+- **Specify a custom version override:**
+  ```powershell
+  .\deploy_chrome.ps1 -Version "1.1.0"
+  ```
+
+---
+
+### Microsoft Edge Add-ons Store Deployment (`deploy_edge.ps1`)
+
+To distribute the extension through the **Microsoft Edge Add-ons Store**, you can package and deploy it using `deploy_edge.ps1` in the workspace root:
+
+```powershell
+.\deploy_edge.ps1
+```
 
 
 ## Troubleshooting
