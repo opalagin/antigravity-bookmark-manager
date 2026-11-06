@@ -1,6 +1,6 @@
 # Backend-Issued JWT Authentication — Specification
 
-Status: Draft
+Status: Completed
 Author: brainstorm with Claude
 Date: 2026-05-23
 
@@ -332,31 +332,31 @@ Railway: add `JWT_SECRET` as a sealed env var. Local dev: `.env` file (already i
 
 Suggested ordering. Each phase is independently testable.
 
-**Phase 1 — Backend: JWT plumbing, no behaviour change.**
+**Phase 1 — Backend: JWT plumbing, no behaviour change.** ✅
 - Add `pyjwt` to `requirements.txt`.
 - Add `JWT_SECRET` env handling (and the `verify_security.py` check).
 - Create `auth.py` (new file) with `create_access_token`, `create_refresh_token`, `decode_token`, and the rotation helper. Pure functions, fully unit-testable.
 - No endpoints, no `get_current_user` changes yet.
 
-**Phase 2 — Backend: endpoints + table.**
+**Phase 2 — Backend: endpoints + table.** ✅
 - Add `RefreshToken` model in `models.py`.
 - Add `refresh_tokens` table creation to `lifespan` in `main.py`.
 - Add `POST /auth/google`, `POST /auth/refresh`, `POST /auth/logout` to `main.py`.
 - `get_current_user` still does the old Google userinfo path. New endpoints work in parallel.
 
-**Phase 3 — Backend: cut over `get_current_user`.**
+**Phase 3 — Backend: cut over `get_current_user`.** ✅
 - Replace `get_current_user` body with the JWT-verify version (§5.5).
 - Keep `AUTH_ALLOW_LEGACY_GOOGLE_TOKEN=1` for one release (§6) so the extension can be updated separately.
 - Deploy.
 
-**Phase 4 — Extensions.**
+**Phase 4 — Extensions.** ✅
 - Update `Chrome Plugin/api.js` and `Firefox Plugin/api.js` with two-token storage, refresh-on-401, single-flight refresh.
 - Update `popup.js` (both) to call `/auth/google` after the Google flow and store the returned tokens.
 - Update `sidebar.js`, `manager.js`, and any other hydrators to read `accessToken` instead of `authToken`.
 - Add the one-shot migration: delete legacy `authToken` and force re-login.
 - Bump extension versions (`manifest.json` → `1.0.8`).
 
-**Phase 5 — Cleanup.**
+**Phase 5 — Cleanup.** ✅
 - Remove `AUTH_ALLOW_LEGACY_GOOGLE_TOKEN`. Remove the Google userinfo fallback in `get_current_user`.
 - Add the refresh-token prune script.
 
