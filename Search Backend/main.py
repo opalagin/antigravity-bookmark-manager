@@ -7,7 +7,7 @@ from slowapi.errors import RateLimitExceeded
 from sqlalchemy import text
 from sqlmodel import select
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from typing import List, Optional
 from datetime import datetime
 import uvicorn
@@ -22,8 +22,14 @@ from database import get_session, engine
 from models import AllowedUser, RefreshToken, openai_dim
 import auth
 import settings
+import tagging
 
-from services import ingestion_service, search_service, management_service
+from services import (
+    ingestion_service,
+    search_service,
+    management_service,
+    tagging_service,
+)
 # --- Pydantic Models ---
 
 class BookmarkIngestRequest(BaseModel):
@@ -31,6 +37,7 @@ class BookmarkIngestRequest(BaseModel):
     title: str
     content_markdown: str
     tags: List[str] = []
+    auto_tag: bool = False
 
 class BookmarkResponse(BaseModel):
     id: str
@@ -41,6 +48,21 @@ class BookmarkResponse(BaseModel):
     created_at: Optional[datetime] = None
     updated_at: Optional[datetime] = None
     content_markdown: Optional[str] = None
+    auto_tag_status: Optional[str] = None
+
+
+class TagSuggestRequest(BaseModel):
+    url: str = Field(..., max_length=2048)
+    title: str = Field(..., max_length=512)
+    content_markdown: str = Field(..., max_length=200000)
+
+
+class TagSuggestResponse(BaseModel):
+    tags: List[str] = []
+    source: str
+    reused_existing: List[str] = []
+    new_tags: List[str] = []
+    fallback_reason: Optional[str] = None
 
 class BookmarkUpdateRequest(BaseModel):
     title: Optional[str] = None
@@ -113,6 +135,8 @@ async def lifespan(app: FastAPI):
             raise ValueError(
                 "JWT_SECRET must be set and at least 32 bytes in production"
             )
+
+    tagging.validate_tagging_config()
 
     app.state.http = httpx.AsyncClient(timeout=10.0)
 
@@ -216,9 +240,106 @@ async def lifespan(app: FastAPI):
 
 
 limiter = Limiter(key_func=get_remote_address)
+
+
+def user_rate_key(request: Request) -> str:
+    auth_header = request.headers.get("authorization", "")
+    if auth_header.lower().startswith("bearer "):
+        token = auth_header[7:].strip()
+        if token.startswith("user_") and settings.ENVIRONMENT != "production":
+            return f"user:{token}"
+        try:
+            payload = auth.decode_token(token, typ="access")
+            sub = payload.get("sub")
+            if sub:
+                return f"user:{sub}"
+        except Exception:
+            pass
+    return f"ip:{get_remote_address(request)}"
+
+
+class _BodyTooLargeError(BaseException):
+    pass
+
+
+class RequestBodyLimitMiddleware:
+    def __init__(self, app):
+        self.app = app
+
+    async def __call__(self, scope, receive, send):
+        if scope["type"] != "http":
+            await self.app(scope, receive, send)
+            return
+
+        method = scope.get("method", "").upper()
+        path = scope.get("path", "")
+        limit: Optional[int] = None
+        if method == "POST":
+            if path == "/tags/suggest":
+                limit = tagging.get_tag_suggest_max_request_bytes()
+            elif path == "/bookmarks":
+                limit = tagging.get_ingest_max_request_bytes()
+
+        if limit is None:
+            await self.app(scope, receive, send)
+            return
+
+        for header_name, header_val in scope.get("headers", []):
+            if header_name.lower() == b"content-length":
+                try:
+                    if int(header_val.decode("latin1").strip()) > limit:
+                        await self._send_413(send)
+                        return
+                except ValueError:
+                    pass
+
+        bytes_received = 0
+        response_started = False
+
+        async def limited_receive():
+            nonlocal bytes_received
+            message = await receive()
+            if message.get("type") == "http.request":
+                body = message.get("body", b"")
+                bytes_received += len(body)
+                if bytes_received > limit:
+                    raise _BodyTooLargeError()
+            return message
+
+        async def wrapped_send(message):
+            nonlocal response_started
+            if message.get("type") == "http.response.start":
+                response_started = True
+            await send(message)
+
+        try:
+            await self.app(scope, limited_receive, wrapped_send)
+        except _BodyTooLargeError:
+            if not response_started:
+                await self._send_413(send)
+            else:
+                raise
+
+    @staticmethod
+    async def _send_413(send):
+        body = b'{"detail":"Request body too large"}'
+        await send(
+            {
+                "type": "http.response.start",
+                "status": 413,
+                "headers": [
+                    (b"content-type", b"application/json"),
+                    (b"content-length", str(len(body)).encode("latin1")),
+                ],
+            }
+        )
+        await send({"type": "http.response.body", "body": body})
+
+
 app = FastAPI(title="Smart Bookmark Manager API", version="1.0.0", lifespan=lifespan)
 app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)  # type: ignore
+app.add_middleware(RequestBodyLimitMiddleware)
 
 
 # --- CORS Configuration ---
@@ -270,6 +391,35 @@ async def get_current_user(
 @app.get("/")
 async def root():
     return {"message": "Smart Bookmark Manager API is running"}
+
+
+@app.get("/config")
+async def get_config():
+    return {"tag_suggest_timeout_ms": tagging.get_tag_suggest_timeout_ms()}
+
+
+@app.post("/tags/suggest", response_model=TagSuggestResponse)
+@limiter.limit("20/minute", key_func=user_rate_key)
+async def suggest_tags(
+    request: Request,
+    payload: TagSuggestRequest,
+    session: AsyncSession = Depends(get_session),
+    user_id: str = Depends(get_current_user),
+):
+    suggestion = await tagging_service.suggest_tags(
+        session=session,
+        user_id=user_id,
+        title=payload.title,
+        url=payload.url,
+        content_markdown=payload.content_markdown,
+    )
+    return TagSuggestResponse(
+        tags=suggestion.tags,
+        source=suggestion.source,
+        reused_existing=suggestion.reused_existing,
+        new_tags=suggestion.new_tags,
+        fallback_reason=suggestion.fallback_reason,
+    )
 
 
 @app.post("/auth/google")
@@ -487,13 +637,31 @@ async def ingest_bookmark(
     user_id: str = Depends(get_current_user)
 ):
     try:
+        tags_to_store = payload.tags
+        auto_tag_status = "skipped"
+        if payload.auto_tag and not payload.tags:
+            suggestion = await tagging_service.suggest_tags(
+                session=session,
+                user_id=user_id,
+                title=payload.title,
+                url=payload.url,
+                content_markdown=payload.content_markdown,
+            )
+            if suggestion.source == "fallback":
+                tags_to_store = []
+                reason = suggestion.fallback_reason or "internal_error"
+                auto_tag_status = f"fallback:{reason}"
+            else:
+                tags_to_store = suggestion.tags
+                auto_tag_status = "applied"
+
         bookmark = await ingestion_service.process_bookmark(
             session,
             user_id,
             payload.url,
             payload.title,
             payload.content_markdown,
-            payload.tags,
+            tags_to_store,
         )
         return BookmarkResponse(
             id=str(bookmark.id),
@@ -503,7 +671,8 @@ async def ingest_bookmark(
             status="ingested",
             created_at=bookmark.created_at,
             updated_at=bookmark.updated_at,
-            content_markdown=bookmark.content_markdown
+            content_markdown=bookmark.content_markdown,
+            auto_tag_status=auto_tag_status,
         )
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
