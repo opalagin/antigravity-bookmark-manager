@@ -1,4 +1,4 @@
-globalThis.browser = globalThis.browser || chrome;
+globalThis.browser = globalThis.browser || (typeof chrome !== 'undefined' ? chrome : null);
 // API Base URL is now dynamic via browser.storage.local
 
 const api = {
@@ -219,9 +219,271 @@ const api = {
         return this._fetch('/bookmarks/reembed/status', {
             method: 'GET'
         });
+    },
+
+    async getConfig() {
+        try {
+            const result = await browser.storage.local.get("apiUrl");
+            const baseUrl = result.apiUrl || "http://localhost";
+            const controller = new AbortController();
+            const timer = setTimeout(() => controller.abort(), 2000);
+            try {
+                const response = await fetch(`${baseUrl}/config`, {
+                    method: 'GET',
+                    signal: controller.signal
+                });
+                if (response.ok) {
+                    return await response.json();
+                }
+            } finally {
+                clearTimeout(timer);
+            }
+        } catch (_e) {
+            // Fall through to default config
+        }
+        return { tag_suggest_timeout_ms: 4000 };
+    },
+
+    async suggestTags(url, title, contentMarkdown, options = {}) {
+        return this._fetch('/tags/suggest', {
+            method: 'POST',
+            body: JSON.stringify({
+                url,
+                title,
+                content_markdown: contentMarkdown || ""
+            }),
+            ...options
+        });
+    }
+};
+
+const TagUtils = {
+    tagKey(s) {
+        if (typeof s !== 'string') return '';
+        const norm = s
+            .normalize('NFKC')
+            .replace(/ß/g, 'ss')
+            .replace(/ẞ/g, 'ss')
+            .toLowerCase()
+            .trim()
+            .replace(/[\s_]+/g, '-')
+            .replace(/^[-/]+|[-/]+$/g, '');
+        if (!norm) return '';
+        return norm
+            .split(/\/+/)
+            .map(seg => seg.replace(/-+/g, '-').replace(/^-+|-+$/g, ''))
+            .filter(Boolean)
+            .join('/');
+    },
+
+    mergeSuggestionIntoChips(currentChips, suggestionResponse, userEdited, removedKeys = new Set()) {
+        if (
+            !suggestionResponse ||
+            suggestionResponse.source === 'fallback' ||
+            !Array.isArray(suggestionResponse.tags)
+        ) {
+            return {
+                chips: currentChips.map(c => ({ ...c })),
+                fallback: true
+            };
+        }
+
+        const newSet = new Set(Array.isArray(suggestionResponse.new_tags) ? suggestionResponse.new_tags : []);
+        const reusedSet = new Set(Array.isArray(suggestionResponse.reused_existing) ? suggestionResponse.reused_existing : []);
+        const isTagNew = (t) => {
+            if (newSet.has(t)) return true;
+            if (reusedSet.has(t)) return false;
+            return false;
+        };
+
+        const canReplace =
+            !userEdited &&
+            removedKeys.size === 0 &&
+            currentChips.every(c => c.origin === 'suggested');
+
+        if (canReplace) {
+            const nextChips = [];
+            const seen = new Set();
+            for (const t of suggestionResponse.tags) {
+                const k = this.tagKey(t);
+                if (!k || seen.has(k) || removedKeys.has(k)) continue;
+                seen.add(k);
+                nextChips.push({
+                    tag: t,
+                    origin: 'suggested',
+                    isNew: isTagNew(t)
+                });
+            }
+            return { chips: nextChips, fallback: false };
+        }
+
+        const nextChips = currentChips.map(c => ({ ...c }));
+        const existingKeys = new Set(nextChips.map(c => this.tagKey(c.tag)));
+        for (const t of suggestionResponse.tags) {
+            const k = this.tagKey(t);
+            if (!k || existingKeys.has(k) || removedKeys.has(k)) continue;
+            existingKeys.add(k);
+            nextChips.push({
+                tag: t,
+                origin: 'suggested',
+                isNew: isTagNew(t)
+            });
+        }
+        return { chips: nextChips, fallback: false };
+    },
+
+    filterTagAutocomplete(vocabTags, rawQuery, excludedTags = [], limit = 8) {
+        const q = (rawQuery || '').trim();
+        const qKey = this.tagKey(q) || q.toLowerCase();
+        if (!qKey) return [];
+
+        const excludedKeys = new Set((excludedTags || []).map(t => this.tagKey(t)));
+        const items = (vocabTags || [])
+            .map(entry => (typeof entry === 'string' ? { tag: entry, count: 1 } : entry))
+            .filter(entry => entry && typeof entry.tag === 'string' && entry.tag.trim().length > 0);
+
+        const matches = [];
+        for (const entry of items) {
+            const k = this.tagKey(entry.tag);
+            if (!k || excludedKeys.has(k)) continue;
+            const lowerTag = entry.tag.toLowerCase();
+            const isPrefix = lowerTag.startsWith(q.toLowerCase()) || k.startsWith(qKey);
+            const isSub = isPrefix || lowerTag.includes(q.toLowerCase()) || k.includes(qKey);
+            if (isSub) {
+                matches.push({
+                    tag: entry.tag,
+                    count: Number(entry.count) || 0,
+                    isPrefix
+                });
+            }
+        }
+
+        matches.sort((a, b) => {
+            if (a.isPrefix !== b.isPrefix) return a.isPrefix ? -1 : 1;
+            if (b.count !== a.count) return b.count - a.count;
+            return a.tag.localeCompare(b.tag);
+        });
+
+        return matches.slice(0, limit).map(m => m.tag);
+    },
+
+    attachTagAutocomplete(inputEl, options = {}) {
+        if (!inputEl || typeof document === 'undefined') return null;
+        const {
+            getVocabTags = () => [],
+            getExcludedTags = () => [],
+            getQuery = (val) => val,
+            onSelect = () => {},
+            dropdownParent = inputEl.parentElement
+        } = options;
+
+        const dropdown = document.createElement('ul');
+        dropdown.className = 'tag-autocomplete-menu hidden';
+        if (dropdownParent) {
+            const pos = typeof window !== 'undefined' && window.getComputedStyle
+                ? window.getComputedStyle(dropdownParent).position
+                : '';
+            if (!pos || pos === 'static') {
+                dropdownParent.style.position = 'relative';
+            }
+            dropdownParent.appendChild(dropdown);
+        }
+
+        let activeIndex = -1;
+        let currentItems = [];
+
+        const hide = () => {
+            dropdown.classList.add('hidden');
+            dropdown.innerHTML = '';
+            activeIndex = -1;
+            currentItems = [];
+        };
+
+        const render = () => {
+            if (inputEl.disabled || inputEl.readOnly) {
+                hide();
+                return;
+            }
+            const query = getQuery(inputEl.value);
+            const matches = this.filterTagAutocomplete(
+                getVocabTags(),
+                query,
+                getExcludedTags()
+            );
+            currentItems = matches;
+            if (matches.length === 0) {
+                hide();
+                return;
+            }
+            activeIndex = 0;
+            dropdown.innerHTML = '';
+            matches.forEach((tag, idx) => {
+                const li = document.createElement('li');
+                li.className = `tag-autocomplete-item${idx === activeIndex ? ' active' : ''}`;
+                li.textContent = tag;
+                li.addEventListener('mousedown', (e) => {
+                    e.preventDefault();
+                    onSelect(tag);
+                    hide();
+                });
+                dropdown.appendChild(li);
+            });
+            dropdown.classList.remove('hidden');
+        };
+
+        const updateHighlight = () => {
+            const children = dropdown.querySelectorAll('.tag-autocomplete-item');
+            children.forEach((el, idx) => {
+                el.classList.toggle('active', idx === activeIndex);
+            });
+        };
+
+        inputEl.addEventListener('input', () => {
+            render();
+        });
+
+        inputEl.addEventListener('keydown', (e) => {
+            if (dropdown.classList.contains('hidden') || currentItems.length === 0) {
+                return;
+            }
+            if (e.key === 'ArrowDown') {
+                e.preventDefault();
+                activeIndex = (activeIndex + 1) % currentItems.length;
+                updateHighlight();
+            } else if (e.key === 'ArrowUp') {
+                e.preventDefault();
+                activeIndex = (activeIndex - 1 + currentItems.length) % currentItems.length;
+                updateHighlight();
+            } else if (e.key === 'Tab' && activeIndex >= 0 && currentItems[activeIndex]) {
+                e.preventDefault();
+                onSelect(currentItems[activeIndex]);
+                hide();
+            } else if (e.key === 'Escape') {
+                hide();
+            }
+        });
+
+        inputEl.addEventListener('blur', () => {
+            setTimeout(hide, 120);
+        });
+
+        return {
+            hide,
+            render,
+            isOpen: () => !dropdown.classList.contains('hidden') && currentItems.length > 0,
+            getSelected: () => (activeIndex >= 0 ? currentItems[activeIndex] : null)
+        };
     }
 };
 
 // Export for usage if using modules, but for simple extension logic, global 'api' is often used.
 // We'll stick to global scope for simplicity in this non-module setup.
-window.api = api;
+globalThis.api = api;
+globalThis.TagUtils = TagUtils;
+if (typeof window !== 'undefined') {
+    window.api = api;
+    window.TagUtils = TagUtils;
+}
+if (typeof module !== 'undefined' && module.exports) {
+    module.exports = { api, TagUtils };
+}

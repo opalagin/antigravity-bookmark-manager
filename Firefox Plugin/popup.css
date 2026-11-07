@@ -58,6 +58,148 @@ body {
     border-radius: var(--radius);
 }
 
+/* Tag Suggestions & Chip Editor */
+.tags-section {
+    margin-bottom: 12px;
+    position: relative;
+}
+
+.tags-section.hidden {
+    display: none;
+}
+
+.tags-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    margin-bottom: 6px;
+    padding: 0 2px;
+}
+
+.tags-hint {
+    font-size: 11px;
+    color: var(--text-3);
+    font-weight: 500;
+}
+
+.tags-actions {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.mini-btn {
+    background: var(--surface-2);
+    border: 1px solid var(--border-strong);
+    border-radius: 6px;
+    color: var(--text-2);
+    font-family: inherit;
+    font-size: 11px;
+    font-weight: 600;
+    padding: 2px 8px;
+    cursor: pointer;
+    transition: background 0.12s, color 0.12s, opacity 0.12s;
+}
+
+.mini-btn:hover:not(:disabled) {
+    background: var(--surface-3);
+    color: var(--text);
+}
+
+.mini-btn:disabled {
+    opacity: 0.45;
+    cursor: not-allowed;
+}
+
+.mini-btn.hidden {
+    display: none;
+}
+
+.chips-box {
+    background: var(--surface-2);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    padding: 6px 8px;
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 5px;
+    min-height: 36px;
+    position: relative;
+}
+
+.chips-box:focus-within {
+    border-color: var(--accent-line);
+    box-shadow: 0 0 0 2px var(--accent-soft);
+}
+
+.chips-list {
+    display: contents;
+}
+
+.popup-tag-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    height: 22px;
+    padding: 0 7px 0 9px;
+    border-radius: 999px;
+    font-size: 11.5px;
+    font-weight: 600;
+    background: var(--accent-soft);
+    color: var(--accent-hover);
+    border: 1px solid var(--accent-line);
+    white-space: nowrap;
+}
+
+.popup-tag-chip.new-tag {
+    background: transparent;
+    color: var(--text-2);
+    border: 1px dashed var(--accent-line);
+}
+
+.chip-remove {
+    background: none;
+    border: none;
+    color: inherit;
+    cursor: pointer;
+    font-size: 13px;
+    line-height: 1;
+    padding: 0 2px;
+    opacity: 0.75;
+}
+
+.chip-remove:hover:not(:disabled) {
+    opacity: 1;
+}
+
+.chip-remove:disabled {
+    cursor: not-allowed;
+    opacity: 0.35;
+}
+
+.chip-input {
+    flex: 1;
+    min-width: 80px;
+    background: transparent;
+    border: none;
+    color: var(--text);
+    font-family: inherit;
+    font-size: 12.5px;
+    padding: 2px 4px;
+    outline: none;
+}
+
+.chip-input::placeholder {
+    color: var(--text-3);
+}
+
+.chip-input:disabled {
+    cursor: not-allowed;
+    opacity: 0.6;
+}
+
 .search-container {
     margin-bottom: 16px;
 }

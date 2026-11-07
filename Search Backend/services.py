@@ -4,6 +4,7 @@ from sqlalchemy import func, text
 from sqlmodel.ext.asyncio.session import AsyncSession
 from models import Bookmark, BookmarkEmbedding, BookmarkEmbeddingOpenAI
 from database import get_session
+from tagging import TaggingService, TagSuggestion
 import asyncio
 import os
 import gc
@@ -770,4 +771,13 @@ class ManagementService:
             self.reembed_jobs[user_id]["error"] = str(e)
 
 management_service = ManagementService()
+tagging_service = TaggingService(management_service)
+__all__ = [
+    "ingestion_service",
+    "search_service",
+    "management_service",
+    "tagging_service",
+    "TaggingService",
+    "TagSuggestion",
+]
 
