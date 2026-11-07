@@ -1,4 +1,5 @@
 import asyncio
+from contextlib import asynccontextmanager
 import json
 import logging
 import os
@@ -6,7 +7,7 @@ import time
 import traceback
 import unicodedata
 from dataclasses import dataclass, field
-from typing import Any, Optional
+from typing import Any, AsyncIterator, Optional
 
 import httpx
 import regex
@@ -22,10 +23,36 @@ from openai import (
 from pydantic import BaseModel, ConfigDict, ValidationError, field_validator
 from sqlmodel.ext.asyncio.session import AsyncSession
 
-if hasattr(asyncio, "timeout"):
-    _async_timeout = asyncio.timeout  # type: ignore[attr-defined]
-else:
-    from async_timeout import timeout as _async_timeout
+
+@asynccontextmanager
+async def _async_timeout(delay: Optional[float]) -> AsyncIterator[None]:
+    if delay is None:
+        yield
+        return
+    builtin_timeout = getattr(asyncio, "timeout", None)
+    if builtin_timeout is not None:
+        async with builtin_timeout(delay):
+            yield
+        return
+    task = asyncio.current_task()
+    loop = asyncio.get_running_loop()
+    timed_out = False
+
+    def _cancel() -> None:
+        nonlocal timed_out
+        timed_out = True
+        if task is not None:
+            task.cancel()
+
+    handle = loop.call_later(max(0.0, delay), _cancel)
+    try:
+        yield
+    except asyncio.CancelledError:
+        if timed_out:
+            raise asyncio.TimeoutError()
+        raise
+    finally:
+        handle.cancel()
 
 logger = logging.getLogger("tags.suggest")
 if not logger.handlers:

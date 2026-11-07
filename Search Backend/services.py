@@ -392,7 +392,7 @@ class SearchService:
         unique_bookmarks = []
         seen_ids = set()
         
-        for embedding_entry, bookmark, _distance in results:
+        for _embedding_entry, bookmark, _distance in results:
             if bookmark.id not in seen_ids:
                 unique_bookmarks.append(bookmark)
                 seen_ids.add(bookmark.id)

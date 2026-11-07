@@ -4,6 +4,7 @@ import sys
 import time
 import unittest
 from types import SimpleNamespace
+from typing import Any
 from unittest.mock import AsyncMock, MagicMock, patch
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
@@ -14,7 +15,6 @@ from httpx import ASGITransport, AsyncClient  # noqa: E402
 from openai import (  # noqa: E402
     APIConnectionError,
     APIStatusError,
-    APITimeoutError,
     RateLimitError,
 )
 
@@ -194,10 +194,11 @@ class TestAutoTagging(unittest.IsolatedAsyncioTestCase):
                 self.assertTrue(cancelled_observed)
 
             # c) 429 from provider -> 1 attempt, fallback="provider_rate_limited"
-            mock_req = httpx.Request(
-                "POST", "https://api.openai.com/v1/chat/completions"
-            )
-            mock_resp_429 = httpx.Response(429, request=mock_req)
+            mock_req: Any = MagicMock()
+            mock_resp_429: Any = MagicMock()
+            mock_resp_429.status_code = 429
+            mock_resp_429.request = mock_req
+            mock_resp_429.headers = {}
             err_429 = RateLimitError(
                 "Rate limit reached", response=mock_resp_429, body=None
             )
@@ -264,7 +265,10 @@ class TestAutoTagging(unittest.IsolatedAsyncioTestCase):
                 )
 
             # e) HTTP 5xx after retry -> provider_unavailable
-            mock_resp_503 = httpx.Response(503, request=mock_req)
+            mock_resp_503: Any = MagicMock()
+            mock_resp_503.status_code = 503
+            mock_resp_503.request = mock_req
+            mock_resp_503.headers = {}
             err_503 = APIStatusError(
                 "Service Unavailable", response=mock_resp_503, body=None
             )
