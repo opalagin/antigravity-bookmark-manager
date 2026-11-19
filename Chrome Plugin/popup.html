@@ -28,13 +28,27 @@
 
         <main class="popup-body">
             <div class="save-row">
-                <button id="save-btn" class="btn save-btn">
+                <button id="save-btn" class="btn save-btn" disabled>
                     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"/></svg>
                     <span>Save Current Page</span>
                 </button>
                 <button id="manage-btn" class="btn ghost mng-btn" title="Manage Library">
                     <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/></svg>
                 </button>
+            </div>
+
+            <div id="tags-section" class="tags-section hidden">
+                <div class="tags-header">
+                    <span id="tags-status-hint" class="tags-hint">Suggesting…</span>
+                    <div class="tags-actions">
+                        <button type="button" id="retry-extract-btn" class="mini-btn hidden" title="Retry content extraction">Retry</button>
+                        <button type="button" id="regenerate-tags-btn" class="mini-btn" title="Regenerate tag suggestions">↻ Regenerate</button>
+                    </div>
+                </div>
+                <div id="chips-box" class="chips-box">
+                    <div id="chips-list" class="chips-list"></div>
+                    <input type="text" id="tag-input" class="chip-input" placeholder="Add tag…" autocomplete="off" />
+                </div>
             </div>
 
             <div class="search-container">

@@ -583,5 +583,31 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 
     // Kickoff
+    if (window.TagUtils && editTags) {
+        const wrapper = document.createElement('div');
+        wrapper.style.position = 'relative';
+        editTags.parentNode.insertBefore(wrapper, editTags);
+        wrapper.appendChild(editTags);
+        window.TagUtils.attachTagAutocomplete(editTags, {
+            dropdownParent: wrapper,
+            getVocabTags: () => state.tags,
+            getExcludedTags: () => {
+                const parts = editTags.value.split(',');
+                parts.pop();
+                return parts.map(t => t.trim()).filter(Boolean);
+            },
+            getQuery: (val) => {
+                const parts = val.split(',');
+                return (parts[parts.length - 1] || '').trim();
+            },
+            onSelect: (selectedTag) => {
+                const parts = editTags.value.split(',').map(t => t.trim());
+                parts[parts.length - 1] = selectedTag;
+                editTags.value = parts.filter(Boolean).join(', ') + ', ';
+                editTags.focus();
+            }
+        });
+    }
+
     init();
 });

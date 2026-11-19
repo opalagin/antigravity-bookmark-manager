@@ -75,3 +75,32 @@ To distribute the extension through the **Microsoft Edge Add-ons Store**, you ca
 - **"browser is not defined"**: Ensure you are running the extension from the `Chrome Plugin` folder.
 - **Connection Errors**: Ensure the backend server is running (`localhost`). Check `api.js` base URL configuration in Options.
 
+## Automatic Tagging Manual Verification Script
+
+Run through these checks in the popup after loading the unpacked extension:
+
+1. **Save Before Suggestion Returns**:
+   - Open an `http(s)` article and click the extension icon.
+   - Verify **Save Current Page** is enabled immediately once extraction succeeds (`Suggesting…` state).
+   - Click **Save Current Page** before `/tags/suggest` finishes and verify the bookmark is saved with the current (possibly empty) chips.
+2. **Merge User Edits With Delayed Suggestions**:
+   - In DevTools Network tab (for the popup), throttle `/tags/suggest` (or add a 3 s delay on the server).
+   - While `Suggesting…` is active, type a custom tag (e.g., `my-custom-tag`) and press `Enter`.
+   - When the server response arrives, verify `my-custom-tag` is kept and non-conflicting suggested tags merge in alongside it.
+3. **Removed Chip Not Re-added on Regenerate**:
+   - Wait for suggestions to load, then click `×` on one suggested chip.
+   - Click **↻ Regenerate** and verify the removed tag is not re-added.
+4. **Stale Response Discarded on Rapid Regenerate**:
+   - With network delay enabled on `/tags/suggest`, trigger **↻ Regenerate** while a suggestion request is already in flight.
+   - Verify only the latest response updates the chip list and the earlier response is ignored.
+5. **Submission Freezes Tags**:
+   - Click **Save Current Page** while a suggestion request is in flight.
+   - Verify the chip editor becomes read-only, the in-flight request is aborted, the saved bookmark's tags match the snapshot at click time, and no late response alters the UI or triggers a second save.
+6. **Backend Down / Fallback**:
+   - Stop the backend (or set `TAGGING_LLM_PROVIDER=off`) and open the popup.
+   - Verify the hint displays `"No suggestions; add tags manually"` and manual tag entry + saving still works when the backend is reachable.
+7. **Extraction Failure (`chrome://` page)**:
+   - Open `chrome://extensions` and open the popup.
+   - Verify **Save Current Page** is disabled and the **Retry** button is shown.
+
+
