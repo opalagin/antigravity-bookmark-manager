@@ -257,14 +257,57 @@ const api = {
     }
 };
 
+const UNICODE_CASEFOLD_MAP = {
+    "\u00df": "ss", "\u01f0": "j\u030c", "\u0345": "\u03b9",
+    "\u0390": "\u03b9\u0308\u0301", "\u03b0": "\u03c5\u0308\u0301", "\u03c2": "\u03c3",
+    "\u1c80": "\u0432", "\u1c81": "\u0434", "\u1c82": "\u043e", "\u1c83": "\u0441",
+    "\u1c84": "\u0442", "\u1c85": "\u0442", "\u1c86": "\u044a", "\u1c87": "\u0463",
+    "\u1c88": "\ua64b", "\u1e96": "h\u0331", "\u1e97": "t\u0308", "\u1e98": "w\u030a",
+    "\u1e99": "y\u030a", "\u1f50": "\u03c5\u0313", "\u1f52": "\u03c5\u0313\u0300",
+    "\u1f54": "\u03c5\u0313\u0301", "\u1f56": "\u03c5\u0313\u0342", "\u1f80": "\u1f00\u03b9",
+    "\u1f81": "\u1f01\u03b9", "\u1f82": "\u1f02\u03b9", "\u1f83": "\u1f03\u03b9",
+    "\u1f84": "\u1f04\u03b9", "\u1f85": "\u1f05\u03b9", "\u1f86": "\u1f06\u03b9",
+    "\u1f87": "\u1f07\u03b9", "\u1f90": "\u1f20\u03b9", "\u1f91": "\u1f21\u03b9",
+    "\u1f92": "\u1f22\u03b9", "\u1f93": "\u1f23\u03b9", "\u1f94": "\u1f24\u03b9",
+    "\u1f95": "\u1f25\u03b9", "\u1f96": "\u1f26\u03b9", "\u1f97": "\u1f27\u03b9",
+    "\u1fa0": "\u1f60\u03b9", "\u1fa1": "\u1f61\u03b9", "\u1fa2": "\u1f62\u03b9",
+    "\u1fa3": "\u1f63\u03b9", "\u1fa4": "\u1f64\u03b9", "\u1fa5": "\u1f65\u03b9",
+    "\u1fa6": "\u1f66\u03b9", "\u1fa7": "\u1f67\u03b9", "\u1fb2": "\u1f70\u03b9",
+    "\u1fb3": "\u03b1\u03b9", "\u1fb4": "\u03ac\u03b9", "\u1fb6": "\u03b1\u0342",
+    "\u1fb7": "\u03b1\u0342\u03b9", "\u1fc2": "\u1f74\u03b9", "\u1fc3": "\u03b7\u03b9",
+    "\u1fc4": "\u03ae\u03b9", "\u1fc6": "\u03b7\u0342", "\u1fc7": "\u03b7\u0342\u03b9",
+    "\u1fd2": "\u03b9\u0308\u0300", "\u1fd6": "\u03b9\u0342", "\u1fd7": "\u03b9\u0308\u0342",
+    "\u1fe2": "\u03c5\u0308\u0300", "\u1fe4": "\u03c1\u0313", "\u1fe6": "\u03c5\u0342",
+    "\u1fe7": "\u03c5\u0308\u0342", "\u1ff2": "\u1f7c\u03b9", "\u1ff3": "\u03c9\u03b9",
+    "\u1ff4": "\u03ce\u03b9", "\u1ff6": "\u03c9\u0342", "\u1ff7": "\u03c9\u0342\u03b9"
+};
+
 const TagUtils = {
+    unicodeCaseFold(s) {
+        const lowered = s.normalize('NFKC').toLowerCase();
+        let out = '';
+        for (const ch of lowered) {
+            const mapped = UNICODE_CASEFOLD_MAP[ch];
+            if (mapped !== undefined) {
+                out += mapped;
+                continue;
+            }
+            const cp = ch.codePointAt(0);
+            if (cp >= 0xab70 && cp <= 0xabbf) {
+                out += String.fromCodePoint(cp - 0x97d0);
+            } else if (cp >= 0x13f8 && cp <= 0x13fd) {
+                out += String.fromCodePoint(cp - 8);
+            } else {
+                out += ch;
+            }
+        }
+        return out;
+    },
+
     tagKey(s) {
         if (typeof s !== 'string') return '';
-        const norm = s
+        const norm = this.unicodeCaseFold(s)
             .normalize('NFKC')
-            .replace(/ß/g, 'ss')
-            .replace(/ẞ/g, 'ss')
-            .toLowerCase()
             .trim()
             .replace(/[\s_]+/g, '-')
             .replace(/^[-/]+|[-/]+$/g, '');

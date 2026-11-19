@@ -26,6 +26,7 @@ function initPopup() {
     let suggestAbortController = null;
     let suggestTimeoutTimer = null;
     let suggestTimeoutMs = 4000;
+    let configLoadPromise = null;
     let vocabTags = [];
     let autocompleteCtrl = null;
     let regenCooldownTimer = null;
@@ -161,7 +162,7 @@ function initPopup() {
         }
     }
 
-    async function loadServerConfigAndVocab() {
+    async function loadServerConfig() {
         if (!window.api) return;
         try {
             const cfg = await window.api.getConfig();
@@ -171,15 +172,19 @@ function initPopup() {
         } catch (_e) {
             suggestTimeoutMs = 4000;
         }
+    }
 
-        try {
-            const tags = await window.api.getTags();
-            if (Array.isArray(tags)) {
-                vocabTags = tags;
-            }
-        } catch (_e) {
-            vocabTags = [];
-        }
+    function loadVocabTags() {
+        if (!window.api) return;
+        window.api.getTags()
+            .then((tags) => {
+                if (Array.isArray(tags)) {
+                    vocabTags = tags;
+                }
+            })
+            .catch(() => {
+                vocabTags = [];
+            });
     }
 
     async function requestSuggestions() {
@@ -194,6 +199,13 @@ function initPopup() {
         suggestAbortController = controller;
 
         setPopupState('suggesting', 'Suggesting…');
+
+        if (configLoadPromise) {
+            await configLoadPromise;
+            if (reqId !== currentRequestId || popupState === 'submitting' || popupState === 'saved') {
+                return;
+            }
+        }
 
         let timedOut = false;
         suggestTimeoutTimer = setTimeout(() => {
@@ -370,16 +382,12 @@ function initPopup() {
             if (popupState !== 'suggesting' && popupState !== 'ready') return;
             if (regenInCooldown) return;
 
-            // Start 5s cooldown when regenerating from 'ready' (or when superseding an in-flight request)
-            const wasInFlight = popupState === 'suggesting';
-            if (!wasInFlight) {
-                regenInCooldown = true;
-                if (regenCooldownTimer) clearTimeout(regenCooldownTimer);
-                regenCooldownTimer = setTimeout(() => {
-                    regenInCooldown = false;
-                    syncUIForState();
-                }, 5000);
-            }
+            regenInCooldown = true;
+            if (regenCooldownTimer) clearTimeout(regenCooldownTimer);
+            regenCooldownTimer = setTimeout(() => {
+                regenInCooldown = false;
+                syncUIForState();
+            }, 5000);
             requestSuggestions();
         });
     }
@@ -625,7 +633,8 @@ function initPopup() {
             api.setTokens(storedJwt.accessToken, storedJwt.refreshToken);
             showLogoutButton();
             loadRecent();
-            await loadServerConfigAndVocab();
+            loadVocabTags();
+            configLoadPromise = loadServerConfig();
             await prepareCurrentTab();
         } else {
             if (tagsSection) tagsSection.classList.add('hidden');
@@ -732,7 +741,8 @@ function initPopup() {
                         showLogoutButton();
                         setSafeHTML(bookmarksList, '<li class="empty-state">Logged in! Loading...</li>');
                         loadRecent();
-                        await loadServerConfigAndVocab();
+                        loadVocabTags();
+                        configLoadPromise = loadServerConfig();
                         await prepareCurrentTab();
                     } else {
                         throw new Error("No access token found in redirect.");
