@@ -539,9 +539,7 @@ class ManagementService:
         
         if tag_prefix:
             if tag_prefix == "untagged":
-                base = base.where(
-                    (Bookmark.tags == '{}') | (Bookmark.tags == None)  # noqa: E711
-                )
+                base = base.where(text("tags IS NULL OR cardinality(tags) = 0"))
             else:
                 # Match exact tag or nested tags under this prefix
                 base = base.where(
