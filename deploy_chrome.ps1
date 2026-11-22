@@ -8,7 +8,7 @@ param (
 $ErrorActionPreference = "Stop"
 
 # Configuration
-$ExtensionDir = Join-Path $PSScriptRoot "Chrome Plugin"
+$ExtensionDir = Join-Path $PSScriptRoot "chrome-plugin"
 $EnvFile = Join-Path $PSScriptRoot ".env"
 $ArtifactsDir = Join-Path $ExtensionDir "artifacts"
 $TempBuildDir = Join-Path $PSScriptRoot "Chrome_Plugin_Build_Temp"

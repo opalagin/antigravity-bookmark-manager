@@ -5,7 +5,7 @@
 1.  Open **Chrome** and navigate to `chrome://extensions`.
 2.  Enable **Developer mode** (toggle in the top right corner).
 3.  Click the **Load unpacked** button.
-4.  Select the **`Chrome Plugin`** folder inside the `AI Bookmark Manager v1` directory.
+4.  Select the **`chrome-plugin`** folder inside the `AI Bookmark Manager v1` directory.
 5.   The "Smart Bookmark Manager" extension should appear in the list.
 
 ## Debugging
@@ -47,7 +47,7 @@ This will:
 - Auto-increment the patch version in `manifest.json` (e.g., `1.0.23` -> `1.0.24`).
 - Stage clean source files in a temporary folder (excluding `.git`, `artifacts`, `INSTRUCTIONS.md`, temp files, etc.).
 - Ensure `manifest.json` is at the root of the archive.
-- Compress the extension into `Chrome Plugin\artifacts\chrome-plugin-v<Version>.zip`.
+- Compress the extension into `chrome-plugin\artifacts\chrome-plugin-v<Version>.zip`.
 - Print direct links and instructions for manual upload to the [Chrome Web Store Developer Dashboard](https://chrome.google.com/webstore/devconsole).
 
 #### Advanced Options:
@@ -72,7 +72,7 @@ To distribute the extension through the **Microsoft Edge Add-ons Store**, you ca
 
 
 ## Troubleshooting
-- **"browser is not defined"**: Ensure you are running the extension from the `Chrome Plugin` folder.
+- **"browser is not defined"**: Ensure you are running the extension from the `chrome-plugin` folder.
 - **Connection Errors**: Ensure the backend server is running (`localhost`). Check `api.js` base URL configuration in Options.
 
 ## Automatic Tagging Manual Verification Script

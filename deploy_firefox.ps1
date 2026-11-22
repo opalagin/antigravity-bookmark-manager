@@ -7,7 +7,7 @@ param (
 $ErrorActionPreference = "Stop"
 
 # Configuration
-$ExtensionDir = "Firefox Plugin"
+$ExtensionDir = ".\firefox-plugin"
 $EnvFile = ".env"
 $ArtifactsDir = "$ExtensionDir\web-ext-artifacts"
 

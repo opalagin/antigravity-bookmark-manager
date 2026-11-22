@@ -25,10 +25,10 @@ Constraints:
 
 ## 3. Current state (reference)
 
-- **Upsert by exact URL.** `ingestion_service.process_bookmark` (`Search Backend/services.py:241-263`) looks up `(user_id, url)` and overwrites `title`, `content_markdown` **and `tags`** if found. A unique constraint `unique_user_url (user_id, url)` backs this (`models.py:17`).
+- **Upsert by exact URL.** `ingestion_service.process_bookmark` (`search-backend/services.py:241-263`) looks up `(user_id, url)` and overwrites `title`, `content_markdown` **and `tags`** if found. A unique constraint `unique_user_url (user_id, url)` backs this (`models.py:17`).
 - **Saved URL** comes from `extract.js` → `window.location.href`, which equals `tab.url` for http(s) tabs (fragment included).
 - **No lookup endpoint.** The closest is `GET /bookmarks?query=`, an `ILIKE` substring search on title/url (`services.py:554-558`). It is paginated and treats `%`/`_` as wildcards, so it is not usable for an exact check.
-- **Background scripts** are empty placeholders in both plugins (`Chrome Plugin/background.js`, `Firefox Plugin/background.js`). Chrome uses an MV3 service worker; Firefox uses `background.scripts` (event page).
+- **Background scripts** are empty placeholders in both plugins (`chrome-plugin/background.js`, `firefox-plugin/background.js`). Chrome uses an MV3 service worker; Firefox uses `background.scripts` (event page).
 - **Permissions**: `activeTab, storage, scripting, identity` (+ `sidePanel` in Chrome). There is **no `tabs` permission**, so a background script cannot read `tab.url` for tabs the user has not interacted with.
 - **Popup save button** (`popup.html:31`, `popup.js:15` `DEFAULT_SAVE_BTN_HTML`). `syncUIForState()` (`popup.js:59-84`) rewrites the button HTML on every state change. On success the button flashes `.btn-success` for 1.5 s (`popup.js:420-428`).
 - **Tokens**: access/refresh JWTs live in `storage.local`. `/auth/refresh` **rotates** the refresh token and revokes the old one (`main.py:571`). If two contexts refresh at the same time, one of them ends up holding a revoked token.
@@ -75,7 +75,7 @@ Exact match for one URL. Used by the popup.
 - `url` must be ≤ 2048 chars, the same bound as `TagSuggestRequest.url`, else `422`.
 - Rate limit: `60/minute`.
 
-Tests (add to a new `Search Backend/test_bookmark_lookup.py`, same style as `test_auto_tagging.py`): owner sees own URLs; other users' URLs are not returned; exact match only (`…/a` ≠ `…/a/`); 404 path; 422 on overlong URL.
+Tests (add to a new `search-backend/test_bookmark_lookup.py`, same style as `test_auto_tagging.py`): owner sees own URLs; other users' URLs are not returned; exact match only (`…/a` ≠ `…/a/`); 404 path; 422 on overlong URL.
 
 ### 4.3 Background script: keep the set, paint the icon
 
@@ -191,7 +191,7 @@ After any successful `deleteBookmark` / `bulkDelete` / "delete bookmarks with ta
 ### 4.7 Docs
 
 - `PRIVACY.md` §1: add that the extension keeps a **local copy of your bookmarked URLs** to show the saved indicator. The current tab's URL is compared **on the device** and is not sent to the backend. Update "Last Updated".
-- `Docs/Frontend Design/README.md` color table: add `--success` / `--success-hover`.
+- `docs/frontend-design/README.md` color table: add `--success` / `--success-hover`.
 
 ## 5. Risks and open questions
 

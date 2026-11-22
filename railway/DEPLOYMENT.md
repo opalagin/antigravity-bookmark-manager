@@ -72,7 +72,7 @@
 
 ## Database Schema
 
-Initialized via `Railway/setup_railway_db.py` (idempotent — safe to re-run).
+Initialized via `railway/setup_railway_db.py` (idempotent — safe to re-run).
 
 ```sql
 -- Vector similarity search extension
@@ -128,7 +128,7 @@ CREATE TABLE allowed_users (
 
 ## Code Changes Made for Railway Compatibility
 
-### `Search Backend/database.py`
+### `search-backend/database.py`
 Supports both Railway's single `DATABASE_URL` and the local Docker Compose `POSTGRES_*` variables:
 ```python
 DATABASE_URL = os.getenv("DATABASE_URL")
@@ -141,7 +141,7 @@ else:
     DATABASE_URL = f"postgresql+asyncpg://{user}:{password}@{host}:{port}/{db}"
 ```
 
-### `Search Backend/main.py`
+### `search-backend/main.py`
 FastAPI lifespan now runs idempotent schema init on every startup — no volume-mounted `init.sql` needed:
 ```python
 @asynccontextmanager
@@ -155,7 +155,7 @@ async def lifespan(app):
     await engine.dispose()
 ```
 
-### `Search Backend/railway.json`
+### `search-backend/railway.json`
 Minimal Railway service config (deploy-only, no build — image comes from Docker Hub):
 ```json
 {
@@ -173,19 +173,19 @@ Minimal Railway service config (deploy-only, no build — image comes from Docke
 
 ## Utility Scripts
 
-### `Railway/setup_railway_db.py`
+### `railway/setup_railway_db.py`
 One-shot script to initialize the schema and seed `allowed_users` against the Railway Postgres public proxy. Safe to re-run (all statements are idempotent).
 
 ```bash
-python Railway/setup_railway_db.py
+python railway/setup_railway_db.py
 ```
 
-### `Railway/seed_allowed_users.py`
+### `railway/seed_allowed_users.py`
 Lightweight script to add new allowed users to an already-initialized database. Set `PILOT_MODE_EMAILS` env var (comma-separated) to override the default list.
 
 ```bash
 $env:DATABASE_URL="postgresql://postgres:<pass>@nozomi.proxy.rlwy.net:49749/railway"
-python Railway/seed_allowed_users.py
+python railway/seed_allowed_users.py
 ```
 
 ---
@@ -196,7 +196,7 @@ When new code changes are ready:
 
 ```bash
 # 1. Build the updated Docker image locally
-docker build -t apalagin/ai-bookmanager-backend:latest "Search Backend/"
+docker build -t apalagin/ai-bookmanager-backend:latest search-backend/
 
 # 2. Push to Docker Hub
 docker push apalagin/ai-bookmanager-backend:latest

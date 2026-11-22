@@ -16,12 +16,12 @@ Generate a short, high-quality tag list for a bookmark **at ingest time**, based
 ## 2. Motivation
 
 Today both extensions ship bookmarks with an **empty** tag array:
-- `Chrome Plugin/popup.js:52-57` — `window.api.saveBookmark(url, title, content, [])` (comment literally says *"Removed tags"*).
-- `Firefox Plugin/popup.js` — mirror of the same call.
+- `chrome-plugin/popup.js:52-57` — `window.api.saveBookmark(url, title, content, [])` (comment literally says *"Removed tags"*).
+- `firefox-plugin/popup.js` — mirror of the same call.
 
-The PRD ingestion flow (`Docs/prd.md:40-47`) specifies *"Suggests tags (optional AI pre-fetch). User confirms/edits tags."* — this step was dropped during an earlier UI simplification and never came back. As a result:
+The PRD ingestion flow (`docs/prd.md:40-47`) specifies *"Suggests tags (optional AI pre-fetch). User confirms/edits tags."* — this step was dropped during an earlier UI simplification and never came back. As a result:
 
-- All bookmarks arrive untagged. The Manager UI's tag-tree (`Docs/prd.md:134-138`) is empty for new users and never fills unless the user manually tags each bookmark.
+- All bookmarks arrive untagged. The Manager UI's tag-tree (`docs/prd.md:134-138`) is empty for new users and never fills unless the user manually tags each bookmark.
 - Hierarchical tag features (`work/projects/auth` grouping, tag-tree rename, bulk prefix rewrite) have nothing to operate on.
 - Semantic search works, but **tag-based filtering** — the fast path for "show me all my React bookmarks" — is unusable.
 
@@ -38,13 +38,13 @@ Doing this manually is the right escape hatch for power users but a bad default:
 
 ## 4. Current state (reference)
 
-- `Search Backend/main.py:481-509` — `POST /bookmarks` accepts `payload.tags: list[str]` and stores it verbatim via `ingestion_service.process_bookmark`. No tag inference anywhere on the server path.
-- `Search Backend/services.py:571-581` — `ManagementService.get_tags` returns `[{tag, count}]` for a user, scoped to their own bookmarks. This is the authoritative source for "what tags does this user already have".
-- `Search Backend/services.py:30-37` — `_get_openai_client()` memoized `AsyncOpenAI`. Used today by `SearchService.chat` with model `gpt-4o-mini` (`services.py:491`). Reuse both.
-- `Search Backend/services.py:414-476` — the chat path also supports an `OLLAMA_BASE_URL` / `OLLAMA_MODEL` fallback, selected via `LLM_PROVIDER`. The tagging path should mirror this so self-hosted deployments are covered.
-- `Search Backend/models.py:15-32` — `Bookmark.tags: list[str]` via Postgres `ARRAY(VARCHAR)`. No normalization constraint. Tags are opaque strings; hierarchy is a `/`-delimited convention only.
-- `Chrome Plugin/popup.js:17-100` / `Firefox Plugin/popup.js` — the save handler runs synchronously after content extraction. It does **not** currently round-trip to the backend before calling `saveBookmark`. The new flow (§5.4) adds one extra call in between.
-- `Chrome Plugin/api.js`, `Firefox Plugin/api.js` — single `api` object with `_fetch`; new endpoints land here first.
+- `search-backend/main.py:481-509` — `POST /bookmarks` accepts `payload.tags: list[str]` and stores it verbatim via `ingestion_service.process_bookmark`. No tag inference anywhere on the server path.
+- `search-backend/services.py:571-581` — `ManagementService.get_tags` returns `[{tag, count}]` for a user, scoped to their own bookmarks. This is the authoritative source for "what tags does this user already have".
+- `search-backend/services.py:30-37` — `_get_openai_client()` memoized `AsyncOpenAI`. Used today by `SearchService.chat` with model `gpt-4o-mini` (`services.py:491`). Reuse both.
+- `search-backend/services.py:414-476` — the chat path also supports an `OLLAMA_BASE_URL` / `OLLAMA_MODEL` fallback, selected via `LLM_PROVIDER`. The tagging path should mirror this so self-hosted deployments are covered.
+- `search-backend/models.py:15-32` — `Bookmark.tags: list[str]` via Postgres `ARRAY(VARCHAR)`. No normalization constraint. Tags are opaque strings; hierarchy is a `/`-delimited convention only.
+- `chrome-plugin/popup.js:17-100` / `firefox-plugin/popup.js` — the save handler runs synchronously after content extraction. It does **not** currently round-trip to the backend before calling `saveBookmark`. The new flow (§5.4) adds one extra call in between.
+- `chrome-plugin/api.js`, `firefox-plugin/api.js` — single `api` object with `_fetch`; new endpoints land here first.
 
 ## 5. Design
 
@@ -337,7 +337,7 @@ async suggestTags(url, title, contentMarkdown) {
 }
 ```
 
-**`popup.js`** save lifecycle (`Chrome Plugin/popup.js:17-100` and the `Firefox Plugin/popup.js` mirror). Today extraction runs inside the Save click handler. **Decision: preparation starts when the popup opens**, not on an extra "Prepare" click, so the common path stays a single Save click.
+**`popup.js`** save lifecycle (`chrome-plugin/popup.js:17-100` and the `firefox-plugin/popup.js` mirror). Today extraction runs inside the Save click handler. **Decision: preparation starts when the popup opens**, not on an extra "Prepare" click, so the common path stays a single Save click.
 
 Explicit state machine:
 
@@ -372,7 +372,7 @@ The chip UI:
 
 **Manifest permissions / content security:** no new permissions. All calls go through the existing authed `api._fetch`.
 
-**No new UI surface for tag editing beyond save.** The Manager UI already supports post-hoc tag editing (`Docs/prd.md:139-152`). Suggested tags are editable only at ingest time.
+**No new UI surface for tag editing beyond save.** The Manager UI already supports post-hoc tag editing (`docs/prd.md:139-152`). Suggested tags are editable only at ingest time.
 
 ### 5.9 "Auto-fill on empty" server fallback (scripted ingests)
 
@@ -429,7 +429,7 @@ All validated once at startup (same pattern as `EMBEDDING_PROVIDER` in `services
 - **Latency**: budgeted at 300–700 ms for OpenAI, 1–3 s for small Ollama models. The extension never blocks saving on this — the suggestion call runs while the user still has the popup open; if it is late, the user types tags manually or saves without them.
 - **Tag explosion by content type.** News articles about one-off events (names, places, dates) risk producing tags that will never appear again (`sam-altman`, `openai-dev-day-2026`). Prompt rule 5 and the 1–2 word constraint push back on this, but the rate of singleton tags per user is a metric worth watching — expose it on `/tags` later as a diagnostic.
 - **Multi-language users.** The prompt prefers an existing tag's language when one fits. Otherwise tags follow the content's language, so a bilingual user may get two parallel vocabularies (`programming` and `programmierung`). Validation keeps both intact (§5.6). Cross-language merging is part of the deferred curation feature.
-- **New dependency.** The `regex` package is needed for `\p{L}`-style classes. It is small and pure-wheel; add it to `Search Backend` dependencies via uv.
+- **New dependency.** The `regex` package is needed for `\p{L}`-style classes. It is small and pure-wheel; add it to `search-backend` dependencies via uv.
 - **"Regenerate" button abuse.** Rate-limited server-side; the only remaining concern is cost drift from power users spamming regenerations. Watch telemetry; if it matters, add a per-save-session cap client-side.
 - **Server-side auto-tag flag and consent.** `auto_tag: true` with an empty `tags` list is a convenience for scripted ingests. It is an opt-in flag, not a default, precisely so the extension's confirm-before-save contract stays unambiguous.
 
@@ -472,7 +472,7 @@ Acceptance checks:
 - Firefox: identical.
 - Bump both `manifest.json` versions.
 
-Acceptance checks (manual script in `Chrome Plugin/INSTRUCTIONS.md`, plus unit tests of the chip-merge function if feasible):
+Acceptance checks (manual script in `chrome-plugin/INSTRUCTIONS.md`, plus unit tests of the chip-merge function if feasible):
 - Save is enabled before the suggestion returns. Clicking it submits the current (possibly empty) chips.
 - Delay the server 3 s, add a chip by hand, let the suggestion arrive → the hand-added chip is kept and suggestions merge in.
 - Remove a suggested chip, then Regenerate → the removed tag isn't re-added.

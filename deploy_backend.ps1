@@ -31,7 +31,7 @@ Write-Host "--------------------------------------------------"
 
 # 2. Build
 Write-Host "`n[1/2] Building Docker Image..."
-docker build -t $FULL_IMAGE_NAME "./Search Backend"
+docker build -t $FULL_IMAGE_NAME "./search-backend"
 
 if ($LASTEXITCODE -ne 0)
 {

@@ -1,7 +1,7 @@
 version: 2
 updates:
   - package-ecosystem: pip
-    directory: "/Search Backend"
+    directory: "/search-backend"
     schedule:
       interval: weekly
     open-pull-requests-limit: 5
