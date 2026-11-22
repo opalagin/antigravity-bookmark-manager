@@ -13,22 +13,22 @@ Bookmark manager with AI assistance. Saves bookmarks, supports tagging, and answ
 
 ## Repo content
 
-### Firefox Plugin
+### `firefox-plugin`
 Firefox plugin that allows users to save bookmarks and manage them with AI assistance.
 
-### Chrome Plugin
+### `chrome-plugin`
 Chrome plugin that allows users to save bookmarks and manage them with AI assistance.
 
-### Storage
+### `storage`
 docker-compose to start the storage for local development.
 
-### Search Backend
+### `search-backend`
 Fast API back-end which provides actual functionality for browser extensions.
 
-### Railway
+### `railway`
 Railway configs that provides hosting and deployment for the bookmark manager.
 
-### Docs
+### `docs`
 Documentation for the bookmark manager.
 
 ## Tools

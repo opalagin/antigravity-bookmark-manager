@@ -17,9 +17,9 @@ Google remains the **identity provider**. We keep using `chrome.identity.launchW
 
 ## 2. Motivation
 
-Today's auth has three concrete problems, all visible in `Search Backend/main.py:199-209`:
+Today's auth has three concrete problems, all visible in `search-backend/main.py:199-209`:
 
-- The extension stores the raw Google **access token** returned by the OAuth 2.0 implicit flow (`Chrome Plugin/popup.js:255`, `Firefox Plugin/popup.js:327`, `response_type=token`). Google expires these in ~3600 seconds. There is no refresh token (implicit flow does not issue one), no silent renewal, and no expiry check on the client. The first API call after expiry raises `Error: Invalid Authentication Token` (line 209) and the user must manually re-click "Login with Google".
+- The extension stores the raw Google **access token** returned by the OAuth 2.0 implicit flow (`chrome-plugin/popup.js:255`, `firefox-plugin/popup.js:327`, `response_type=token`). Google expires these in ~3600 seconds. There is no refresh token (implicit flow does not issue one), no silent renewal, and no expiry check on the client. The first API call after expiry raises `Error: Invalid Authentication Token` (line 209) and the user must manually re-click "Login with Google".
 - Every authenticated request makes a synchronous HTTPS call to `https://www.googleapis.com/oauth2/v3/userinfo` (`main.py:199`). That is one extra round trip per request, subject to Google rate limits, and a hard dependency on Google's availability for our backend to function.
 - "Multi-device" today works only by accident. Each device runs `launchWebAuthFlow` independently and gets its own short-lived Google access token. Devices do not invalidate each other, but they also share no notion of a session — so user-perceived "logouts" (the 1-hour expiry firing on each device on its own schedule) feel like devices kicking each other out.
 
@@ -36,20 +36,20 @@ The user's stated requirement — *"logged in on all my devices for longer times
 
 ## 4. Current state (reference)
 
-- `Search Backend/main.py:182-183` — `HTTPBearer()` dependency named `security`; every protected route depends on `get_current_user`.
-- `Search Backend/main.py:187-249` — `get_current_user`:
+- `search-backend/main.py:182-183` — `HTTPBearer()` dependency named `security`; every protected route depends on `get_current_user`.
+- `search-backend/main.py:187-249` — `get_current_user`:
   - Reads `Authorization: Bearer <token>` from the request.
   - Calls Google's `userinfo` endpoint to validate.
   - On 200, extracts `sub` and `email`, checks `AllowedUser` allowlist, returns `sub` as the user id.
   - On non-200, raises HTTP 401 with detail `"Invalid Authentication Token. Status: ..."` — this is the error the user reports.
   - Has a mock-auth fallback for tokens starting with `user_` (development convenience).
-- `Search Backend/main.py:185, 199` — uses the lifespan-scoped `httpx.AsyncClient` (`app.state.http`).
-- `Search Backend/models.py:66-72` — `AllowedUser` table, keyed by `email`.
-- `Search Backend/requirements.txt` — does **not** currently include a JWT library.
-- `Chrome Plugin/api.js:1-89` — single global `api` object. Stores `token` in memory; persistent copy lives in `chrome.storage.local` under key `authToken`. `_fetch` attaches `Authorization: Bearer ${this.token}` and treats 401 as a terminal error (just throws "Unauthorized").
-- `Chrome Plugin/popup.js:247-291` — login flow: `launchWebAuthFlow` against `accounts.google.com/o/oauth2/v2/auth` with `response_type=token`, scopes `openid email profile`. Token parsed out of the redirect URL hash and persisted.
-- `Firefox Plugin/popup.js:319-359` — mirror of the Chrome flow, against `browser.identity.launchWebAuthFlow`. Identical scopes and parameters.
-- `Chrome Plugin/sidebar.js`, `Chrome Plugin/popup.js`, `Firefox Plugin/sidebar.js`, `Firefox Plugin/popup.js`, `Firefox Plugin/manager.js` all hydrate `api.token` from `chrome.storage.local.authToken` on load (Firefox uses `browser.storage.local`). MV3 service worker / background.js does not currently participate in auth.
+- `search-backend/main.py:185, 199` — uses the lifespan-scoped `httpx.AsyncClient` (`app.state.http`).
+- `search-backend/models.py:66-72` — `AllowedUser` table, keyed by `email`.
+- `search-backend/requirements.txt` — does **not** currently include a JWT library.
+- `chrome-plugin/api.js:1-89` — single global `api` object. Stores `token` in memory; persistent copy lives in `chrome.storage.local` under key `authToken`. `_fetch` attaches `Authorization: Bearer ${this.token}` and treats 401 as a terminal error (just throws "Unauthorized").
+- `chrome-plugin/popup.js:247-291` — login flow: `launchWebAuthFlow` against `accounts.google.com/o/oauth2/v2/auth` with `response_type=token`, scopes `openid email profile`. Token parsed out of the redirect URL hash and persisted.
+- `firefox-plugin/popup.js:319-359` — mirror of the Chrome flow, against `browser.identity.launchWebAuthFlow`. Identical scopes and parameters.
+- `chrome-plugin/sidebar.js`, `chrome-plugin/popup.js`, `firefox-plugin/sidebar.js`, `firefox-plugin/popup.js`, `firefox-plugin/manager.js` all hydrate `api.token` from `chrome.storage.local.authToken` on load (Firefox uses `browser.storage.local`). MV3 service worker / background.js does not currently participate in auth.
 
 ## 5. Design
 
@@ -195,7 +195,7 @@ class RefreshToken(SQLModel, table=True):
 
 No FK to a `users` table — we don't have one today, and `user_sub` is the same opaque string we use everywhere else. Adding a `users` table is a separate, larger refactor.
 
-Cleanup: a periodic prune of `expires_at < now() - interval '30 days'` rows. v1 can defer this (table will accumulate at most a few hundred rows per pilot user); a simple `DELETE` run from an admin script (`Search Backend/`) is enough. Not a cron job in v1.
+Cleanup: a periodic prune of `expires_at < now() - interval '30 days'` rows. v1 can defer this (table will accumulate at most a few hundred rows per pilot user); a simple `DELETE` run from an admin script (`search-backend/`) is enough. Not a cron job in v1.
 
 ### 5.5 Backend changes — `get_current_user`
 
@@ -247,7 +247,7 @@ Use **PyJWT** (`pyjwt==2.9.0` or current).
 - Already in the dependency graph of several existing libraries; adding it explicitly is a no-op at install size.
 - Alternative considered: `python-jose`. Larger, supports JWE which we don't need, has had a maintenance gap. Rejected.
 
-Add to `Search Backend/requirements.txt`:
+Add to `search-backend/requirements.txt`:
 ```
 pyjwt==2.9.0
 ```
@@ -288,7 +288,7 @@ Both extensions get the same logic; below is described once. Two places implemen
 
 The change is **not** silently backwards-compatible — old Google access tokens stored under `authToken` will start failing the JWT decode in §5.5 immediately. The extension handles this gracefully:
 
-1. On extension load, if `authToken` exists in storage but `accessToken` does not → delete `authToken` and force re-login. This runs **once**, in the `checkAuth()` paths (`Chrome Plugin/popup.js:checkAuth`, `Firefox Plugin/popup.js:checkAuth`, plus sidebar/manager equivalents that hydrate from storage).
+1. On extension load, if `authToken` exists in storage but `accessToken` does not → delete `authToken` and force re-login. This runs **once**, in the `checkAuth()` paths (`chrome-plugin/popup.js:checkAuth`, `firefox-plugin/popup.js:checkAuth`, plus sidebar/manager equivalents that hydrate from storage).
 2. From the user's perspective: one extra "Login with Google" click after updating the extension. After that, they stay logged in for ~90 days per device.
 
 Backend rollout order matters slightly: deploy backend first (new endpoints + new `get_current_user`). At this point any extension still sending a Google access token will get 401 immediately. Then ship extension updates. Window of breakage = the time between the two deploys; for a pilot of ~one user, this is not worth a feature flag.
@@ -310,7 +310,7 @@ New env vars (read in `main.py` startup or a thin `settings.py`):
 
 Railway: add `JWT_SECRET` as a sealed env var. Local dev: `.env` file (already in use for `OPENAI_API_KEY` etc.).
 
-`Search Backend/verify_security.py` should be extended to fail-fast if `JWT_SECRET` is unset or shorter than 32 bytes.
+`search-backend/verify_security.py` should be extended to fail-fast if `JWT_SECRET` is unset or shorter than 32 bytes.
 
 ## 8. Security considerations
 
@@ -350,7 +350,7 @@ Suggested ordering. Each phase is independently testable.
 - Deploy.
 
 **Phase 4 — Extensions.** ✅
-- Update `Chrome Plugin/api.js` and `Firefox Plugin/api.js` with two-token storage, refresh-on-401, single-flight refresh.
+- Update `chrome-plugin/api.js` and `firefox-plugin/api.js` with two-token storage, refresh-on-401, single-flight refresh.
 - Update `popup.js` (both) to call `/auth/google` after the Google flow and store the returned tokens.
 - Update `sidebar.js`, `manager.js`, and any other hydrators to read `accessToken` instead of `authToken`.
 - Add the one-shot migration: delete legacy `authToken` and force re-login.

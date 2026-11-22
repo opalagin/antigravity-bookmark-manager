@@ -12,7 +12,7 @@ This is **not** a swap. Both providers ship in the same image and are selected a
 
 ## 2. Motivation
 
-- The local embedding model is the single largest source of resident memory in the Search Backend container (see `Docs/Internals` memory roadmap and the May 17 profiling notes). Idle RSS on Railway is ~2 GB, primarily from ONNX Runtime + numpy buffers held by `fastembed`.
+- The local embedding model is the single largest source of resident memory in the Search Backend container (see `docs/internals` memory roadmap and the May 17 profiling notes). Idle RSS on Railway is ~2 GB, primarily from ONNX Runtime + numpy buffers held by `fastembed`.
 - OpenAI `text-embedding-3-small` is priced at ~$0.02 / 1M tokens. For a single-user pilot at typical bookmark sizes (few thousand bookmarks, ~1–5 k tokens each, re-embedded rarely), monthly embedding cost is on the order of cents — far below the marginal Railway memory cost.
 - Offloading inference to OpenAI lets us drop the embedding model from the container entirely in hosted mode, unblocking a much smaller base image and lower Railway plan tier.
 
@@ -28,13 +28,13 @@ This is **not** a swap. Both providers ship in the same image and are selected a
 
 Single embedding code path, no provider abstraction:
 
-- `Search Backend/services.py:50-70` — `EmbeddingService` constructs `TextEmbedding("BAAI/bge-small-en-v1.5", threads=1)` at module import. Model loads eagerly into the singleton `embedding_service`.
-- `Search Backend/services.py:58-67` — `embed_documents(texts)` and `embed_query(text)` are the only two public entry points. Both offload to a thread via `asyncio.to_thread`.
-- `Search Backend/services.py:111` (ingest) and `services.py:137` (search) and `services.py:456` (re-embed) are the three call sites.
-- `Search Backend/models.py:39` — `embedding: List[float] = Field(sa_column=Column(Vector(384)))`. The 384 is the BGE-small dimension and is hard-coded.
-- `Search Backend/main.py:116` — schema bootstrap SQL also hard-codes `VECTOR(384)` and creates an HNSW index `embedding_idx` with `vector_cosine_ops`.
-- `Search Backend/requirements.txt` — `fastembed==0.4.2`, `openai==1.63.2` already present (OpenAI is currently used only for chat).
-- `Search Backend/services.py:30-37` — `_get_openai_client()` already memoizes an `AsyncOpenAI` keyed off `OPENAI_API_KEY`. Reuse it.
+- `search-backend/services.py:50-70` — `EmbeddingService` constructs `TextEmbedding("BAAI/bge-small-en-v1.5", threads=1)` at module import. Model loads eagerly into the singleton `embedding_service`.
+- `search-backend/services.py:58-67` — `embed_documents(texts)` and `embed_query(text)` are the only two public entry points. Both offload to a thread via `asyncio.to_thread`.
+- `search-backend/services.py:111` (ingest) and `services.py:137` (search) and `services.py:456` (re-embed) are the three call sites.
+- `search-backend/models.py:39` — `embedding: List[float] = Field(sa_column=Column(Vector(384)))`. The 384 is the BGE-small dimension and is hard-coded.
+- `search-backend/main.py:116` — schema bootstrap SQL also hard-codes `VECTOR(384)` and creates an HNSW index `embedding_idx` with `vector_cosine_ops`.
+- `search-backend/requirements.txt` — `fastembed==0.4.2`, `openai==1.63.2` already present (OpenAI is currently used only for chat).
+- `search-backend/services.py:30-37` — `_get_openai_client()` already memoizes an `AsyncOpenAI` keyed off `OPENAI_API_KEY`. Reuse it.
 
 ## 5. Design
 
@@ -143,7 +143,7 @@ The existing `/bookmarks/reembed` endpoint (`main.py:464`) already does the only
 2. New container starts on the new provider. Search / ingest now read and write the **new** provider's table.
 3. Old provider's table still contains stale data for every existing bookmark. Until each bookmark is re-embedded, it is **invisible to search**. New ingests work normally.
 4. Each user triggers `/bookmarks/reembed` from the extension UI (already wired — `services.py:426`). Background job streams per bookmark, writes into the new provider's table.
-5. Optionally: a one-shot admin script (extend `Search Backend/reembed.py`) iterates all users.
+5. Optionally: a one-shot admin script (extend `search-backend/reembed.py`) iterates all users.
 
 Document explicitly: switching providers does not delete old-provider data automatically. Operators can `TRUNCATE bookmark_embeddings` (or `_openai`) once the migration is verified, to reclaim disk.
 
@@ -187,7 +187,7 @@ Phased so each step is independently shippable.
 
 - Build a small offline eval (a few queries × known-relevant bookmarks) and tune `EMBEDDING_SEARCH_THRESHOLD` for OpenAI.
 - Document the operator workflow for switching providers (env change → redeploy → re-embed per user).
-- Update `Railway/DEPLOYMENT.md` with the new env vars.
+- Update `railway/DEPLOYMENT.md` with the new env vars.
 
 ## 7. Risks and open questions
 

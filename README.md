@@ -26,7 +26,7 @@ Before running, you **must** configure the following:
 1.  **Google OAuth2 Client ID**:
     - Create a Web Application credential in Google Cloud Console.
     - Add the redirect URI provided by the extension (check console logs).
-    - Update `CLIENT_ID` in `Firefox Plugin/popup.js`.
+    - Update `CLIENT_ID` in `firefox-plugin/popup.js`.
 2.  **OpenAI API Key**:
     - Set `OPENAI_API_KEY` environment variable for the backend.
 
@@ -36,20 +36,20 @@ Before running, you **must** configure the following:
 Ensure you have **Docker Desktop** installed and running.
 
 ```bash
-cd Storage
+cd storage
 docker-compose up -d
 ```
 This spins up a PostgreSQL container with the `pgvector` extension on port `5432`.
 
 **IMPORTANT**: If you have an old database volume, you must reset it to apply the new schema (Multi-tenancy & Tags).
-- Run `python reset_db.py` in `Search Backend/` (if enabled)
+- Run `python reset_db.py` in `search-backend/` (if enabled)
 - OR: `docker-compose down -v` and then `up -d` to start fresh.
 
 ### 2. Start the Backend API
 Ensure you have **Python 3.10+** installed.
 
 ```bash
-cd "Search Backend"
+cd search-backend
 
 # Create and activate virtual environment
 python -m venv .venv
@@ -71,7 +71,7 @@ The API will be available at `http://localhost:8000`.
 1.  Open Firefox and navigate to `about:debugging`.
 2.  Select **"This Firefox"** from the sidebar.
 3.  Click **"Load Temporary Add-on..."**.
-4.  Navigate to the `Firefox Plugin/` folder in this project.
+4.  Navigate to the `firefox-plugin/` folder in this project.
 5.  Select the `manifest.json` file.
 
 #### Configuration (Important!)

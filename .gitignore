@@ -30,7 +30,7 @@ share/python-wheels/
 MANIFEST
 
 # Exceptions
-!Firefox Plugin/lib/
+!firefox-plugin/lib/
 
 # Virtual Environments
 venv/

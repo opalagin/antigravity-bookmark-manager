@@ -1,20 +1,20 @@
 {
   "include": [
-    "Search Backend"
+    "search-backend"
   ],
   "exclude": [
     "**/__pycache__",
     "**/.venv",
     "**/node_modules",
-    "Chrome Plugin",
-    "Firefox Plugin",
-    "Storage",
-    "Docs"
+    "chrome-plugin",
+    "firefox-plugin",
+    "storage",
+    "docs"
   ],
   "ignore": [
-    "Search Backend/.venv"
+    "search-backend/.venv"
   ],
-  "venvPath": "Search Backend",
+  "venvPath": "search-backend",
   "venv": ".venv",
   "pythonVersion": "3.11",
   "pythonPlatform": "Linux",
@@ -31,10 +31,10 @@
   "reportPrivateImportUsage": "none",
   "executionEnvironments": [
     {
-      "root": "Search Backend",
+      "root": "search-backend",
       "pythonVersion": "3.11",
       "extraPaths": [
-        "Search Backend"
+        "search-backend"
       ]
     }
   ]

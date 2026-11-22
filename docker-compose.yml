@@ -41,7 +41,7 @@ services:
       POSTGRES_DB: ${POSTGRES_DB}
     volumes:
       - postgres_data:/var/lib/postgresql/data
-      - ./Storage/init.sql:/docker-entrypoint-initdb.d/init.sql
+      - ./storage/init.sql:/docker-entrypoint-initdb.d/init.sql
     networks:
       - backend
     restart: unless-stopped
@@ -53,7 +53,7 @@ services:
 
   backend:
     # build:
-    #   context: ./Search Backend
+    #   context: ./search-backend
     #   dockerfile: Dockerfile
     image: ${DOCKER_USERNAME}/ai-bookmanager-backend:latest
     container_name: search_backend
