@@ -567,6 +567,20 @@ class ManagementService:
         
         return bookmarks, total
 
+    async def get_bookmark_urls(self, session: AsyncSession, user_id: str) -> List[str]:
+        stmt = select(Bookmark.url).where(Bookmark.user_id == user_id)
+        result = await session.execute(stmt)
+        return list(result.scalars().all())
+
+    async def lookup_bookmark(
+        self, session: AsyncSession, user_id: str, url: str
+    ) -> Optional[Bookmark]:
+        stmt = select(Bookmark).where(
+            Bookmark.user_id == user_id, Bookmark.url == url
+        )
+        result = await session.execute(stmt)
+        return result.scalar_one_or_none()
+
     async def get_tags(self, session: AsyncSession, user_id: str):
         # Return unique tags and their counts for the user
         stmt = text("""

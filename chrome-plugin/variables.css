@@ -20,6 +20,8 @@
     --accent-line: rgba(124, 111, 240, 0.38);
     --danger: #df6360;
     --danger-soft: rgba(223, 99, 96, 0.16);
+    --success: #27ae60;
+    --success-hover: #2ecc71;
 
     /* shape + rhythm */
     --radius: 10px;
@@ -81,10 +83,15 @@
     box-shadow: 0 1px 0 rgba(255, 255, 255, 0.18) inset, 0 6px 16px -8px var(--danger);
 }
 
+.btn.btn-saved {
+    background: linear-gradient(180deg, var(--success-hover), var(--success));
+    box-shadow: 0 1px 0 rgba(255, 255, 255, 0.18) inset, 0 6px 16px -8px var(--success);
+}
+
 /* Runtime JS Feedback Classes (Success / Error states) */
 .btn.btn-success {
-    background: linear-gradient(180deg, #2ecc71, #27ae60) !important;
-    box-shadow: 0 1px 0 rgba(255, 255, 255, 0.18) inset, 0 6px 16px -8px #27ae60 !important;
+    background: linear-gradient(180deg, var(--success-hover), var(--success)) !important;
+    box-shadow: 0 1px 0 rgba(255, 255, 255, 0.18) inset, 0 6px 16px -8px var(--success) !important;
 }
 
 .btn.btn-error {

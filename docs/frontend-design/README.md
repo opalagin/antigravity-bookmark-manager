@@ -57,7 +57,7 @@ These are the **locked** defaults.
 | `--text-2` | `#a3acba` | Secondary text, body copy in tables |
 | `--text-3` | `#727b8a` | Muted: placeholders, meta, dates, eyebrows |
 
-### Color — accent (violet) + danger
+### Color — accent (violet) + danger + success
 | Token | Value | Use |
 |---|---|---|
 | `--accent` | `#7c6ff0` | Primary accent (button base, active states) |
@@ -66,6 +66,8 @@ These are the **locked** defaults.
 | `--accent-line` | `rgba(124,111,240,0.38)` | Borders on tinted elements |
 | `--danger` | `#df6360` | Destructive (Delete button) |
 | `--danger-soft` | `rgba(223,99,96,0.16)` | Reserved for danger tints |
+| `--success` | `#27ae60` | Saved / success state (gradient bottom, shadow) |
+| `--success-hover` | `#2ecc71` | Saved / success state (gradient top) |
 
 ### Shape & rhythm
 | Token | Value | Notes |
