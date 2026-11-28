@@ -254,6 +254,48 @@ const api = {
             }),
             ...options
         });
+    },
+
+    async lookupBookmark(url) {
+        if (!this.accessToken) {
+            throw new Error("No Auth Token. Please login.");
+        }
+
+        const result = await browser.storage.local.get("apiUrl");
+        const baseUrl = result.apiUrl || "http://localhost";
+        const endpoint = '/bookmarks/lookup';
+
+        const doLookup = () => fetch(`${baseUrl}${endpoint}`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${this.accessToken}`
+            },
+            body: JSON.stringify({ url })
+        });
+
+        let response = await doLookup();
+
+        if (response.status === 401) {
+            try {
+                await this._refresh();
+            } catch (_refreshError) {
+                await this.clearTokens();
+                throw new Error("Session expired. Please login again.");
+            }
+            response = await doLookup();
+        }
+
+        if (response.status === 404) {
+            return null;
+        }
+
+        if (!response.ok) {
+            const errorData = await response.json().catch(() => ({}));
+            throw new Error(errorData.detail || 'API Request Failed');
+        }
+
+        return await response.json();
     }
 };
 

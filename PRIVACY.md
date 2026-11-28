@@ -1,6 +1,6 @@
 # Privacy Policy for Smart Bookmark Manager
 
-**Last Updated:** September 4, 2026
+**Last Updated:** November 27, 2026
 
 This Privacy Policy explains how the **Smart Bookmark Manager** extension ("the Extension") for Google Chrome, Microsoft Edge, and Mozilla Firefox handles user information. We are committed to protecting your privacy, adhering to the Google Chrome Web Store User Data Policy, and ensuring you maintain full control over your data.
 
@@ -17,6 +17,7 @@ The Extension only processes data necessary to fulfill its single purpose: savin
 ### B. Authentication & Session Data
 * **Google Account Authentication:** When you choose to sign in via Google OAuth (`chrome.identity.launchWebAuthFlow`), an authentication token is transmitted securely to your backend API server to verify your identity and generate session tokens.
 * **Local Session Tokens:** Secure session tokens (JWT access and refresh tokens) and user configuration settings (such as your backend API endpoint URL) are stored locally on your device using `chrome.storage.local`.
+* **Local Bookmarked URLs Cache:** To display the "already bookmarked" toolbar indicator without sending your browsing activity to the backend, the Extension keeps a local copy of your own bookmarked URLs in `chrome.storage.local`. Your current tab's URL is compared against this list **on your device** and is never transmitted to the backend for this check.
 
 ### C. What We Do NOT Collect
 * **No Browsing History Tracking:** The Extension does not monitor, log, or transmit your overall browsing activity or search engine queries.

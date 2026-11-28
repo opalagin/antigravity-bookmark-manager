@@ -419,6 +419,15 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     });
 
+    function notifyBookmarksChanged() {
+        try {
+            const p = browser.runtime.sendMessage({ type: 'bookmarks-changed' });
+            if (p && typeof p.catch === 'function') p.catch(() => {});
+        } catch (_e) {
+            // Ignore if background is asleep
+        }
+    }
+
     // Single Delete
     deleteSingleBtn.addEventListener('click', async () => {
         if (!state.selectedBookmarkId) return;
@@ -426,6 +435,7 @@ document.addEventListener('DOMContentLoaded', () => {
         
         try {
             await window.api.deleteBookmark(state.selectedBookmarkId);
+            notifyBookmarksChanged();
             state.selectedBookmarkId = null;
             await loadTags();
             await loadBookmarks();
@@ -445,6 +455,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
         try {
             await window.api.bulkDelete(Array.from(state.selectedBookmarkIds));
+            notifyBookmarksChanged();
             state.selectedBookmarkIds.clear();
             await loadTags();
             await loadBookmarks();
@@ -569,6 +580,7 @@ document.addEventListener('DOMContentLoaded', () => {
             if (res.items && res.items.length > 0) {
                 const ids = res.items.map(b => b.id);
                 await window.api.bulkDelete(ids);
+                notifyBookmarksChanged();
             }
             deleteTagModal.classList.remove('active');
             

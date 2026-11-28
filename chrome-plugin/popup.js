@@ -14,10 +14,17 @@ function initPopup() {
 
     const DEFAULT_SAVE_BTN_HTML =
         '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"/></svg><span>Save Current Page</span>';
+    const SAVED_SAVE_BTN_HTML =
+        '<svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" stroke="currentColor" stroke-width="2"><path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"/></svg><span>Update Bookmark</span>';
 
     // State machine (§5.8):
     // idle | extracting | extract_failed | suggesting | ready | submitting | saved | save_failed
     let popupState = 'idle';
+    let isBookmarked = false;      // current tab URL already saved
+    let existingBookmark = null;   // BookmarkResponse from /bookmarks/lookup, or null
+    let prepareGeneration = 0;
+    let pendingLookupPromise = null;
+    let lookupUrl = null;
     let extractedData = null; // { url, title, content }
     let chips = []; // [{ tag: string, origin: 'suggested' | 'user', isNew: boolean }]
     let removedKeys = new Set();
@@ -60,7 +67,9 @@ function initPopup() {
         const canSave = popupState === 'suggesting' || popupState === 'ready';
         if (saveBtn && popupState !== 'submitting' && popupState !== 'saved' && popupState !== 'save_failed') {
             saveBtn.disabled = !canSave;
-            setSafeHTML(saveBtn, DEFAULT_SAVE_BTN_HTML);
+            setSafeHTML(saveBtn, isBookmarked ? SAVED_SAVE_BTN_HTML : DEFAULT_SAVE_BTN_HTML);
+            saveBtn.classList.toggle('btn-saved', isBookmarked);
+            saveBtn.title = isBookmarked ? 'This page is already in your library. Click to update it.' : '';
         }
 
         if (retryExtractBtn) {
@@ -265,10 +274,64 @@ function initPopup() {
         }
     }
 
+    function hasUserTagEdits() {
+        const hasTypedText = Boolean(tagInput && tagInput.value.trim().length > 0);
+        return (
+            userEditedSinceRequest ||
+            hasTypedText ||
+            removedKeys.size > 0 ||
+            chips.some(c => c.origin === 'user')
+        );
+    }
+
+    function applySavedBookmarkTags(bookmark) {
+        const savedTags = Array.isArray(bookmark && bookmark.tags) ? bookmark.tags : [];
+        chips = savedTags.map(tag => ({ tag, origin: 'user', isNew: false }));
+        setPopupState('ready', 'Saved tags');
+    }
+
+    function startLookup(url, gen) {
+        if (!window.api) {
+            pendingLookupPromise = Promise.resolve(null);
+            return pendingLookupPromise;
+        }
+        lookupUrl = url;
+        const p = window.api.lookupBookmark(url)
+            .catch(() => null)
+            .then((found) => {
+                if (gen !== prepareGeneration) return null;
+                if (extractedData && extractedData.url !== url) return null;
+                if (!found) return null;
+
+                isBookmarked = true;
+                existingBookmark = found;
+
+                // If extraction already finished and we are in suggesting/ready, seed saved tags if unedited
+                if (extractedData && (popupState === 'suggesting' || popupState === 'ready')) {
+                    if (!hasUserTagEdits()) {
+                        currentRequestId += 1;
+                        abortInFlightSuggest();
+                        applySavedBookmarkTags(found);
+                        return found;
+                    }
+                }
+                syncUIForState();
+                return found;
+            });
+        pendingLookupPromise = p;
+        return p;
+    }
+
     async function prepareCurrentTab() {
         if (tagsSection) {
             tagsSection.classList.remove('hidden');
         }
+        prepareGeneration += 1;
+        const gen = prepareGeneration;
+        isBookmarked = false;
+        existingBookmark = null;
+        pendingLookupPromise = null;
+        lookupUrl = null;
         extractedData = null;
         setPopupState('extracting', 'Extracting page…');
 
@@ -280,6 +343,8 @@ function initPopup() {
                 throw new Error('Unsupported tab URL for extraction');
             }
 
+            startLookup(currentTab.url, gen);
+
             await browser.scripting.executeScript({
                 target: { tabId: currentTab.id },
                 files: ['lib/Readability.js', 'lib/turndown.js']
@@ -289,6 +354,8 @@ function initPopup() {
                 target: { tabId: currentTab.id },
                 files: ['extract.js']
             });
+
+            if (gen !== prepareGeneration) return;
 
             const result = executionResults && executionResults[0] && executionResults[0].result;
             if (!result || !result.url) {
@@ -301,7 +368,17 @@ function initPopup() {
                 content: result.content || ''
             };
 
-            // Start suggesting immediately; Save is enabled in 'suggesting'
+            if (extractedData.url !== lookupUrl) {
+                // URL changed (e.g. redirect or SPA navigation) between tabs.query and extract.js
+                isBookmarked = false;
+                existingBookmark = null;
+                startLookup(extractedData.url, gen);
+            } else if (isBookmarked && existingBookmark) {
+                applySavedBookmarkTags(existingBookmark);
+                return;
+            }
+
+            // Start suggesting immediately in parallel with any pending lookup; Save is enabled in 'suggesting'
             await requestSuggestions();
         } catch (err) {
             console.warn('Extraction failed:', err);
@@ -397,8 +474,7 @@ function initPopup() {
         if (popupState !== 'suggesting' && popupState !== 'ready') return;
         if (!extractedData) return;
 
-        // Snapshot tags at click time and freeze editor
-        const snapshotTags = chips.map(c => c.tag);
+        const userEditedBeforeSubmit = hasUserTagEdits();
         currentRequestId += 1;
         abortInFlightSuggest();
         if (autocompleteCtrl) autocompleteCtrl.hide();
@@ -406,6 +482,21 @@ function initPopup() {
         setPopupState('submitting');
         saveBtn.disabled = true;
         setSafeHTML(saveBtn, '<span class="icon">⏳</span> Saving...');
+
+        // Resolve any in-flight lookup before snapshotting an unedited tag list
+        if (pendingLookupPromise && !isBookmarked && !userEditedBeforeSubmit) {
+            try {
+                const found = await pendingLookupPromise;
+                if (found && Array.isArray(found.tags) && !userEditedBeforeSubmit) {
+                    chips = found.tags.map(tag => ({ tag, origin: 'user', isNew: false }));
+                    renderChips();
+                }
+            } catch (_e) {
+                // Ignore lookup failure; proceed with current chips
+            }
+        }
+
+        const snapshotTags = chips.map(c => c.tag);
 
         try {
             if (!window.api) throw new Error("API client not loaded");
@@ -416,6 +507,17 @@ function initPopup() {
                 extractedData.content,
                 snapshotTags
             );
+
+            isBookmarked = true;
+            try {
+                const p = browser.runtime.sendMessage({
+                    type: 'bookmark-saved',
+                    url: extractedData.url
+                });
+                if (p && typeof p.catch === 'function') p.catch(() => {});
+            } catch (_e) {
+                // Ignore if background is asleep
+            }
 
             setPopupState('saved', 'Saved!');
             setSafeHTML(saveBtn, '<span class="icon">✅</span> Saved!');

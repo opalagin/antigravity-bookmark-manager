@@ -1,4 +1,11 @@
-from fastapi import FastAPI, HTTPException, Depends, Request, BackgroundTasks, Response
+from fastapi import (
+    BackgroundTasks,
+    Depends,
+    FastAPI,
+    HTTPException,
+    Request,
+    Response,
+)
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from slowapi import Limiter, _rate_limit_exceeded_handler
@@ -84,6 +91,13 @@ class PaginatedBookmarksResponse(BaseModel):
     total: int
     skip: int
     limit: int
+
+class BookmarkUrlsResponse(BaseModel):
+    urls: List[str]
+    count: int
+
+class BookmarkLookupRequest(BaseModel):
+    url: str = Field(..., max_length=2048)
 
 class TagCount(BaseModel):
     tag: str
@@ -783,6 +797,47 @@ async def get_bookmarks(
         return PaginatedBookmarksResponse(
             items=items, total=total, skip=skip, limit=limit
         )
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/bookmarks/urls", response_model=BookmarkUrlsResponse)
+@limiter.limit("30/minute")
+async def get_bookmark_urls(
+    request: Request,
+    session: AsyncSession = Depends(get_session),
+    user_id: str = Depends(get_current_user),
+):
+    try:
+        urls = await management_service.get_bookmark_urls(session, user_id)
+        return BookmarkUrlsResponse(urls=urls, count=len(urls))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/bookmarks/lookup", response_model=BookmarkResponse)
+@limiter.limit("60/minute")
+async def lookup_bookmark(
+    request: Request,
+    payload: BookmarkLookupRequest,
+    session: AsyncSession = Depends(get_session),
+    user_id: str = Depends(get_current_user),
+):
+    try:
+        bookmark = await management_service.lookup_bookmark(
+            session, user_id, payload.url
+        )
+        if not bookmark:
+            raise HTTPException(status_code=404, detail="Not bookmarked")
+        return BookmarkResponse(
+            id=str(bookmark.id),
+            url=bookmark.url,
+            title=bookmark.title,
+            tags=bookmark.tags,
+            status="saved",
+            created_at=bookmark.created_at,
+            updated_at=bookmark.updated_at,
+        )
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
