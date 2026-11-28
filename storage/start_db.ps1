@@ -20,7 +20,7 @@ docker compose up -d
 Write-Host "Waiting for database to be ready..." -ForegroundColor Cyan
 $retries = 10
 while ($retries -gt 0) {
-    $status = docker inspect --format='{{json .State.Health.Status}}' bookmark_db | ConvertFrom-Json
+    $status = docker inspect --format='{{json .State.Health.Status}}' bookmark_db_dev | ConvertFrom-Json
     if ($status -eq "healthy") {
         Write-Host "Database is ready!" -ForegroundColor Green
         exit 0

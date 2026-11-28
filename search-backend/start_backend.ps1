@@ -30,7 +30,7 @@ else {
 # Ensure venv exists and dependencies are synced
 if (-not (Test-Path .venv)) {
     Write-Host "Creating virtual environment with uv..." -ForegroundColor Cyan
-    uv venv --python 3.10 --quiet
+    uv venv --python 3.11 --quiet
 }
 
 Write-Host "Syncing dependencies with uv..." -ForegroundColor Cyan
