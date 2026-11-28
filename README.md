@@ -46,7 +46,7 @@ This spins up a PostgreSQL container with the `pgvector` extension on port `5432
 - OR: `docker-compose down -v` and then `up -d` to start fresh.
 
 ### 2. Start the Backend API
-Ensure you have **Python 3.10+** installed.
+Ensure you have **Python 3.11+** installed.
 
 ```bash
 cd search-backend
